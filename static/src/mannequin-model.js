@@ -33,7 +33,7 @@ export const BONE_CHILDREN = {
 // All lengths/radii relative to total mannequin height = 1.0
 export const PROPORTIONS = {
     F: {
-        torso:       { length: 0 },
+        torso:       { length: 0 }, // virtual root, no geometry — transform origin only
         spine:       { length: 0.060, radius: 0.038 },
         chest:       { length: 0.175, width: 0.130, depth: 0.085, radius: 0.050 },
         neck:        { length: 0.055, radius: 0.030 },
@@ -56,7 +56,7 @@ export const PROPORTIONS = {
         shoulderSpan: 0.270,
     },
     M: {
-        torso:       { length: 0 },
+        torso:       { length: 0 }, // virtual root, no geometry — transform origin only
         spine:       { length: 0.060, radius: 0.044 },
         chest:       { length: 0.185, width: 0.155, depth: 0.100, radius: 0.060 },
         neck:        { length: 0.055, radius: 0.036 },
