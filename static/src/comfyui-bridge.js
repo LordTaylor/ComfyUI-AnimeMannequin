@@ -70,7 +70,7 @@ export class ComfyuiBridge {
                     result = true;
                     break;
                 case 'MakeImages':
-                    result = this._renderer.captureImages();
+                    result = await this._renderer.captureImages();
                     break;
                 default:
                     throw new Error(`Unknown method: ${msg.method}`);
@@ -91,6 +91,7 @@ export class ComfyuiBridge {
         const requestId = genId();
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
+                window.removeEventListener('message', handler);
                 reject(new Error(`Timeout waiting for ${method} (${timeoutMs}ms)`));
             }, timeoutMs);
 
