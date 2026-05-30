@@ -18,6 +18,7 @@ export class MannequinRenderer {
         // Depth render target
         this._depthTarget = new THREE.WebGLRenderTarget(512, 512);
         this._depthCamera = this._camera.clone();
+        this._depthMat = new THREE.MeshDepthMaterial();
 
         // Bone Object3D map: name → Object3D
         this._bones   = new Map();
@@ -56,6 +57,10 @@ export class MannequinRenderer {
 
     buildMannequin(gender, sceneData) {
         this._gender = gender;
+        this._mannequinRoot.traverse(obj => {
+            obj.geometry?.dispose();
+            obj.material?.dispose();
+        });
         this._mannequinRoot.clear();
         this._bones.clear();
         this._segments.clear();
@@ -163,8 +168,7 @@ export class MannequinRenderer {
         this._depthTarget.setSize(W, H);
 
         // Swap materials to depth
-        const depthMat = new THREE.MeshDepthMaterial();
-        this._scene.overrideMaterial = depthMat;
+        this._scene.overrideMaterial = this._depthMat;
         this._renderer.setSize(W, H);
         this._renderer.setRenderTarget(this._depthTarget);
         this._renderer.render(this._scene, this._depthCamera);
@@ -215,5 +219,6 @@ export class MannequinRenderer {
     dispose() {
         this._renderer.dispose();
         this._depthTarget.dispose();
+        this._depthMat.dispose();
     }
 }
