@@ -123,6 +123,11 @@ function openMannequinModal(node) {
 
     let closing = false;
 
+    function cleanup() {
+        window.removeEventListener("message", onMessage);
+        window.removeEventListener("keydown", keyHandler);
+    }
+
     // Listen for UserSaved event from editor
     async function onMessage(e) {
         if (e.origin !== window.location.origin) return;
@@ -130,7 +135,7 @@ function openMannequinModal(node) {
         if (d?.cmd !== "mannequin" || d?.method !== "UserSaved") return;
         if (closing) return;
         closing = true;
-        window.removeEventListener("message", onMessage);
+        cleanup();
 
         try {
             setStatus("Capturing...", "#FFA500");
@@ -177,7 +182,7 @@ function openMannequinModal(node) {
 
     // ESC to cancel
     const keyHandler = e => {
-        if (e.key === "Escape") { window.removeEventListener("keydown", keyHandler); overlay.remove(); }
+        if (e.key === "Escape") { cleanup(); overlay.remove(); }
     };
     window.addEventListener("keydown", keyHandler);
 }
