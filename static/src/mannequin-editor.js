@@ -36,9 +36,11 @@ export class MannequinEditor {
         });
         this._transform.addEventListener('change', () => renderer.markDirty());
 
-        // Pointer events
-        canvas.addEventListener('click',     this._onCanvasClick.bind(this));
-        window.addEventListener('keydown',   this._onKeyDown.bind(this));
+        // Pointer events — store bound refs so dispose() can remove them
+        this._boundClick   = this._onCanvasClick.bind(this);
+        this._boundKeyDown = this._onKeyDown.bind(this);
+        canvas.addEventListener('click',   this._boundClick);
+        window.addEventListener('keydown', this._boundKeyDown);
     }
 
     get gender() { return this._gender; }
@@ -140,8 +142,8 @@ export class MannequinEditor {
     }
 
     dispose() {
-        this._canvas.removeEventListener('click', this._onCanvasClick.bind(this));
-        window.removeEventListener('keydown', this._onKeyDown.bind(this));
+        this._canvas.removeEventListener('click',   this._boundClick);
+        window.removeEventListener('keydown',       this._boundKeyDown);
         this._orbit.dispose();
         this._transform.dispose();
     }
