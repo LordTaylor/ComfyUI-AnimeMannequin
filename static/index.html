@@ -93,12 +93,12 @@ if (mode === 'standalone') {
         const a = document.createElement('a');
         a.href = dataUrl; a.download = name; a.click();
     }
-    document.getElementById('btn-dl-pose').addEventListener('click', () => {
-        const { pose } = renderer.captureImages();
+    document.getElementById('btn-dl-pose').addEventListener('click', async () => {
+        const { pose } = await renderer.captureImages();
         download(pose, 'pose.png');
     });
-    document.getElementById('btn-dl-depth').addEventListener('click', () => {
-        const { depth } = renderer.captureImages();
+    document.getElementById('btn-dl-depth').addEventListener('click', async () => {
+        const { depth } = await renderer.captureImages();
         download(depth, 'depth.png');
     });
 }
