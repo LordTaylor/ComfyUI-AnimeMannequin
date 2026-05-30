@@ -50,7 +50,7 @@ export function buildSegments(gender) {
         if (len > 0.001) {
             const segR = r * 0.75;
             const capsule = new THREE.Mesh(
-                new THREE.CapsuleGeometry(segR, len - segR * 2, 8, 16),
+                new THREE.CapsuleGeometry(segR, Math.max(0, len - segR * 2), 8, 16),
                 makeMaterial(SEGMENT_COLOR)
             );
             capsule.userData.boneName = name;
