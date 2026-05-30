@@ -24,10 +24,19 @@ class AnimeMannequinNode:
     CATEGORY      = "AnimeMannequin"
     OUTPUT_NODE   = False
 
+    @staticmethod
+    def _safe_join(base: str, filename: str) -> str:
+        if not filename:
+            return ""
+        real = os.path.realpath(os.path.join(base, filename))
+        if not real.startswith(base + os.sep):
+            return ""  # silently reject path traversal attempts
+        return real
+
     def get_outputs(self, width, height, gender="F", pose_file="", depth_file=""):
-        input_dir = folder_paths.get_input_directory()
-        pose_path  = os.path.join(input_dir, pose_file)  if pose_file  else ""
-        depth_path = os.path.join(input_dir, depth_file) if depth_file else ""
+        input_dir = os.path.realpath(folder_paths.get_input_directory())
+        pose_path  = self._safe_join(input_dir, pose_file)
+        depth_path = self._safe_join(input_dir, depth_file)
         pose  = image_to_tensor(load_image(pose_path,  width, height))
         depth = image_to_tensor(load_image(depth_path, width, height))
         return (pose, depth)
