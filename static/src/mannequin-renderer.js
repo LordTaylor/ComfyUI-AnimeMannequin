@@ -6,6 +6,26 @@ import { buildSegments, computeBoneOffsets, WORLD_HEIGHT, OPENPOSE_COLORS, JOINT
 // 0 = grows only downward; increase for more forward projection.
 const BUST_FWD_PROJECTION = 0.35;
 
+// COCO-style limb connections shared by both the 3D skeleton overlay and the openpose capture.
+// Each entry: [boneA, boneB, rgbHex]
+const SKELETON_LIMBS = [
+    ['neck',        'head',        0xff0055],
+    ['neck',        'upper_arm_R', 0xff0000],
+    ['neck',        'upper_arm_L', 0xff5500],
+    ['upper_arm_R', 'upper_arm_L', 0xff2200],
+    ['upper_arm_R', 'forearm_R',   0xffaa00],
+    ['forearm_R',   'hand_R',      0xffff00],
+    ['upper_arm_L', 'forearm_L',   0xaaff00],
+    ['forearm_L',   'hand_L',      0x55ff00],
+    ['neck',        'pelvis',      0x00ffaa],
+    ['pelvis',      'thigh_R',     0x00ffcc],
+    ['thigh_R',     'shin_R',      0x00ffff],
+    ['shin_R',      'foot_R',      0x00aaff],
+    ['pelvis',      'thigh_L',     0x0055ff],
+    ['thigh_L',     'shin_L',      0x0000ff],
+    ['shin_L',      'foot_L',      0x5500ff],
+];
+
 function sobelCanny(sourceCanvas) {
     const W = sourceCanvas.width;
     const H = sourceCanvas.height;
@@ -96,6 +116,7 @@ export class MannequinRenderer {
         this._dirty = true;
         this._jointColorMode = 'openpose'; // 'openpose' | 'flat'
         this._proportions = defaultProportions();
+        this._skeletonLines = null; // THREE.LineSegments — built after mannequin loads
     }
 
     get camera() { return this._camera; }
@@ -162,6 +183,9 @@ export class MannequinRenderer {
         // Apply joint color mode after build
         this._applyJointColors(this._jointColorMode);
 
+        // Build skeleton line overlay (openpose viewport visualization)
+        this._buildSkeletonLines();
+
         // Apply proportions (from sceneData or current stored proportions)
         this.applyProportions(sceneData?.proportions ?? {});
 
@@ -171,6 +195,14 @@ export class MannequinRenderer {
     setJointColorMode(mode) {
         this._jointColorMode = mode;
         this._applyJointColors(mode);
+        // In openpose mode: show skeleton lines, hide colored joint dots.
+        // In flat mode: hide skeleton lines, show joint dots for editing feedback.
+        if (this._skeletonLines) this._skeletonLines.visible = (mode === 'openpose');
+        this._scene.traverse(o => {
+            if (o.userData.isJoint && !o.userData.isHitTarget) {
+                o.visible = (mode !== 'openpose');
+            }
+        });
         this._dirty = true;
     }
 
@@ -282,6 +314,7 @@ export class MannequinRenderer {
     }
 
     render(viewW, viewH) {
+        if (this._skeletonLines?.visible) this._updateSkeletonLines();
         this._renderer.setSize(viewW, viewH);
         this._camera.aspect = viewW / viewH;
         this._camera.updateProjectionMatrix();
@@ -293,13 +326,20 @@ export class MannequinRenderer {
         const W = this._outputWidth;
         const H = this._outputHeight;
 
-        // Grid never appears in captures — hide it, restore after
-        this._grid.visible = false;
+        // Collect visible joint spheres — hidden for canny/depth, restored after
+        const jointMeshes = [];
+        this._scene.traverse(o => { if (o.userData.isJoint && !o.userData.isHitTarget && o.visible) jointMeshes.push(o); });
+        const setJointsVisible = v => jointMeshes.forEach(j => j.visible = v);
 
-        // --- POSE render ---
+        // Grid/skeleton lines never appear in captures
+        this._grid.visible = false;
+        if (this._skeletonLines) this._skeletonLines.visible = false;
+
         this._renderer.setSize(W, H);
         this._camera.aspect = W / H;
         this._camera.updateProjectionMatrix();
+
+        // --- POSE render (joints visible — gives user the reference image) ---
         this._renderer.render(this._scene, this._camera);
         const poseDataUrl = this._renderer.domElement.toDataURL('image/png');
 
@@ -341,16 +381,19 @@ export class MannequinRenderer {
         ctx.putImageData(imgData, 0, 0);
         const depthDataUrl = depthCanvas.toDataURL('image/png');
 
-        // --- CANNY render ---
+        // --- CANNY render — joints hidden so they don't appear as round artifacts ---
+        setJointsVisible(false);
+        this._renderer.setSize(W, H);
+        this._renderer.render(this._scene, this._camera);
         const cannyDataUrl = sobelCanny(this._renderer.domElement);
+        setJointsVisible(true);
 
         // --- OPENPOSE 2D render ---
-        // Project bone positions to 2D and draw coloured skeleton on black canvas.
-        // Camera is already set up for W×H from the pose render above.
         const openposeDataUrl = this._captureOpenPose(W, H);
 
-        // Restore grid for viewport
+        // Restore grid and skeleton overlay for viewport
         this._grid.visible = true;
+        if (this._skeletonLines) this._skeletonLines.visible = (this._jointColorMode === 'openpose');
         this._dirty = true;
         return { pose: poseDataUrl, depth: depthDataUrl, canny: cannyDataUrl, openpose: openposeDataUrl };
     }
@@ -371,34 +414,6 @@ export class MannequinRenderer {
             sp.set(name, { x: (p.x * 0.5 + 0.5) * W, y: (-p.y * 0.5 + 0.5) * H });
         }
 
-        // Standard COCO-18 connections: [boneA, boneB, rgbHex]
-        // Maps our FK bones to the 18-keypoint skeleton ControlNet expects.
-        // Internal bones (torso/spine/chest) are NOT drawn — only surface joints.
-        const LIMBS = [
-            // Head
-            ['neck',        'head',        0xff0055],
-            // Torso centre
-            ['neck',        'upper_arm_R', 0xff0000],
-            ['neck',        'upper_arm_L', 0xff5500],
-            ['upper_arm_R', 'upper_arm_L', 0xff2200], // shoulder span
-            // Right arm
-            ['upper_arm_R', 'forearm_R',   0xffaa00],
-            ['forearm_R',   'hand_R',      0xffff00],
-            // Left arm
-            ['upper_arm_L', 'forearm_L',   0xaaff00],
-            ['forearm_L',   'hand_L',      0x55ff00],
-            // Hip bridge
-            ['neck',        'pelvis',      0x00ffaa],
-            // Right leg
-            ['pelvis',      'thigh_R',     0x00ffcc],
-            ['thigh_R',     'shin_R',      0x00ffff],
-            ['shin_R',      'foot_R',      0x00aaff],
-            // Left leg
-            ['pelvis',      'thigh_L',     0x0055ff],
-            ['thigh_L',     'shin_L',      0x0000ff],
-            ['shin_L',      'foot_L',      0x5500ff],
-        ];
-
         const dotR  = Math.max(5, Math.round(W / 70));
         const lineW = Math.max(3, Math.round(W / 90));
 
@@ -411,16 +426,16 @@ export class MannequinRenderer {
         ctx.lineJoin = 'round';
 
         // Draw limb lines
-        for (const [a, b, col] of LIMBS) {
+        for (const [a, b, col] of SKELETON_LIMBS) {
             const pa = sp.get(a), pb = sp.get(b);
             if (!pa || !pb) continue;
             ctx.strokeStyle = rgb(col);
             ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
         }
 
-        // Draw keypoint dots on top (use the limb colour of first connection that mentions it)
+        // Draw keypoint dots on top
         const drawn = new Set();
-        for (const [a, b, col] of LIMBS) {
+        for (const [a, b, col] of SKELETON_LIMBS) {
             for (const [k, c] of [[a, col],[b, col]]) {
                 if (drawn.has(k)) continue;
                 drawn.add(k);
@@ -445,6 +460,61 @@ export class MannequinRenderer {
         this._depthCamera.near = Math.max(0.01, dist - size * 0.65);
         this._depthCamera.far  = dist + size * 0.65;
         this._depthCamera.updateProjectionMatrix();
+    }
+
+    _buildSkeletonLines() {
+        // Remove old skeleton lines if any
+        if (this._skeletonLines) {
+            this._scene.remove(this._skeletonLines);
+            this._skeletonLines.geometry.dispose();
+            this._skeletonLines.material.dispose();
+        }
+
+        const N = SKELETON_LIMBS.length;
+        const positions = new Float32Array(N * 2 * 3); // 2 verts × 3 floats per limb
+        const colors    = new Float32Array(N * 2 * 3);
+
+        // Pre-fill colors (static per limb)
+        for (let i = 0; i < N; i++) {
+            const hex = SKELETON_LIMBS[i][2];
+            const r = ((hex >> 16) & 0xff) / 255;
+            const g = ((hex >>  8) & 0xff) / 255;
+            const b = (hex         & 0xff) / 255;
+            colors[i * 6 + 0] = r; colors[i * 6 + 1] = g; colors[i * 6 + 2] = b;
+            colors[i * 6 + 3] = r; colors[i * 6 + 4] = g; colors[i * 6 + 5] = b;
+        }
+
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geo.setAttribute('color',    new THREE.BufferAttribute(colors,    3));
+
+        const mat = new THREE.LineBasicMaterial({
+            vertexColors: true,
+            linewidth: 2,  // >1 only works on some platforms, but sets intent
+            depthTest: false,
+        });
+        const lines = new THREE.LineSegments(geo, mat);
+        lines.renderOrder = 3;
+        lines.visible = (this._jointColorMode === 'openpose');
+        this._skeletonLines = lines;
+        this._scene.add(lines);
+
+        // Populate initial positions
+        this._updateSkeletonLines();
+    }
+
+    _updateSkeletonLines() {
+        if (!this._skeletonLines || !this._bones.size) return;
+        const posAttr = this._skeletonLines.geometry.getAttribute('position');
+        const tmp = new THREE.Vector3();
+        for (let i = 0; i < SKELETON_LIMBS.length; i++) {
+            const [a, b] = SKELETON_LIMBS[i];
+            const boneA = this._bones.get(a);
+            const boneB = this._bones.get(b);
+            if (boneA) { boneA.getWorldPosition(tmp); posAttr.setXYZ(i * 2,     tmp.x, tmp.y, tmp.z); }
+            if (boneB) { boneB.getWorldPosition(tmp); posAttr.setXYZ(i * 2 + 1, tmp.x, tmp.y, tmp.z); }
+        }
+        posAttr.needsUpdate = true;
     }
 
     dispose() {

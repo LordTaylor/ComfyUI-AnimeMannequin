@@ -323,7 +323,7 @@ export async function buildSegments(gender) {
                     geom.boundingBox.getSize(ext);
                     const localUp = new THREE.Vector3(0, 1, 0).applyQuaternion(extraWorldQ.clone().invert());
                     const geoHeight = Math.abs(localUp.x) * ext.x + Math.abs(localUp.y) * ext.y + Math.abs(localUp.z) * ext.z;
-                    extraSeg.userData._bustHalfH = (geoHeight / 2) * extraWorldS.y * charScale;
+                    extraSeg.userData._bustHalfH = (geoHeight / 2) * Math.abs(extraWorldS.y) * charScale;
                 }
                 group.add(extraSeg);
             }
