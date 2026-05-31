@@ -66,7 +66,7 @@ export class ComfyuiBridge {
                     result = true;
                     break;
                 case 'SetGender':
-                    this._editor.setGender(arg);
+                    await this._editor.setGender(arg);
                     result = true;
                     break;
                 case 'MakeImages':
