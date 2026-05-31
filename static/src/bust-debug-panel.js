@@ -1,15 +1,28 @@
 import { BUST_DEFAULTS } from './mannequin-renderer.js';
+import { SetBustCfgCommand } from './commands.js';
 
 /**
  * Floating debug panel for live-tweaking bust config parameters.
+ *
+ * Accepts AppStore + CommandHistory — all changes go through commands
+ * (undo/redo works for bust param tweaks).
+ *
  * Usage:
- *   const dbg = new BustDebugPanel(renderer);
+ *   const dbg = new BustDebugPanel(store, history);
  *   dbg.mount(document.body);
+ *   dbg.toggle();
  */
 export class BustDebugPanel {
-    constructor(renderer) {
-        this._renderer = renderer;
-        this._el = null;
+    constructor(store, history) {
+        this._store   = store;
+        this._history = history;
+        this._el      = null;
+        this._inputs  = {};
+
+        // Store refs for cleanup
+        this._onMouseMove = null;
+        this._onMouseUp   = null;
+        this._storeUnsub  = null;
     }
 
     mount(parent) {
@@ -27,77 +40,82 @@ export class BustDebugPanel {
             'user-select:none',
         ].join(';');
 
+        // ── Header + drag ──────────────────────────────────────────────────────
         const title = document.createElement('div');
         title.textContent = '⚙ Bust Config';
         title.style.cssText = 'font-weight:bold;margin-bottom:6px;color:#7cf;cursor:move;';
         panel.appendChild(title);
 
-        // Drag to move
         let ox = 0, oy = 0, dragging = false;
         title.addEventListener('mousedown', e => {
             dragging = true;
             ox = e.clientX - panel.offsetLeft;
             oy = e.clientY - panel.offsetTop;
         });
-        document.addEventListener('mousemove', e => {
+        this._onMouseMove = e => {
             if (!dragging) return;
-            panel.style.left = (e.clientX - ox) + 'px';
-            panel.style.top  = (e.clientY - oy) + 'px';
+            panel.style.left  = (e.clientX - ox) + 'px';
+            panel.style.top   = (e.clientY - oy) + 'px';
             panel.style.right = 'auto';
-        });
-        document.addEventListener('mouseup', () => { dragging = false; });
+        };
+        this._onMouseUp = () => { dragging = false; };
+        document.addEventListener('mousemove', this._onMouseMove);
+        document.addEventListener('mouseup',   this._onMouseUp);
 
-        // Reset button
-        const resetBtn = document.createElement('button');
-        resetBtn.textContent = 'Reset defaults';
-        resetBtn.style.cssText = 'margin-bottom:8px;padding:2px 8px;font-size:10px;cursor:pointer;width:100%;';
-        resetBtn.addEventListener('click', () => {
-            this._renderer.setBustCfg({ ...BUST_DEFAULTS });
+        // ── Buttons ────────────────────────────────────────────────────────────
+        const mkBtn = (label, onClick) => {
+            const b = document.createElement('button');
+            b.textContent = label;
+            b.style.cssText = 'margin-bottom:6px;padding:2px 8px;font-size:10px;cursor:pointer;width:100%;';
+            b.addEventListener('click', onClick);
+            panel.appendChild(b);
+            return b;
+        };
+
+        mkBtn('Reset defaults', () => {
+            const prev = this._store.getState().bustCfg;
+            this._history.execute(
+                new SetBustCfgCommand(prev, { ...BUST_DEFAULTS }),
+                this._store
+            );
             this._syncInputs();
         });
-        panel.appendChild(resetBtn);
 
-        // Copy button
-        const copyBtn = document.createElement('button');
-        copyBtn.textContent = 'Copy as JS';
-        copyBtn.style.cssText = 'margin-bottom:8px;padding:2px 8px;font-size:10px;cursor:pointer;width:100%;';
-        copyBtn.addEventListener('click', () => {
-            const cfg = this._renderer.bustCfg;
+        const copyBtn = mkBtn('Copy as JS', () => {
+            const cfg   = this._store.getState().bustCfg;
             const lines = Object.entries(cfg).map(([k, v]) => `    ${k.padEnd(9)}: ${v},`).join('\n');
-            navigator.clipboard.writeText(`{\n${lines}\n}`);
-            copyBtn.textContent = 'Copied!';
-            setTimeout(() => { copyBtn.textContent = 'Copy as JS'; }, 1200);
+            navigator.clipboard?.writeText(`{\n${lines}\n}`).then(() => {
+                copyBtn.textContent = 'Copied!';
+                setTimeout(() => { copyBtn.textContent = 'Copy as JS'; }, 1200);
+            }).catch(() => { copyBtn.textContent = 'Clipboard error'; });
         });
-        panel.appendChild(copyBtn);
 
-        // Sliders
+        // ── Sliders ────────────────────────────────────────────────────────────
         const FIELDS = [
-            { key: 'baseFwd',  label: 'baseFwd',  min: -0.2, max:  0.2,  step: 0.01 },
-            { key: 'fwdPush',  label: 'fwdPush',  min: -2.0, max:  2.0,  step: 0.05 },
-            { key: 'droop',    label: 'droop',    min: -1.0, max:  1.0,  step: 0.05 },
-            { key: 'latX',     label: 'latX',     min: -1.0, max:  1.0,  step: 0.05 },
-            { key: 'latY',     label: 'latY',     min: -1.0, max:  1.0,  step: 0.05 },
-            { key: 'rotFwd',   label: 'rotFwd',   min: -2.0, max:  2.0,  step: 0.05 },
-            { key: 'rotLat',   label: 'rotLat',   min: -2.0, max:  2.0,  step: 0.05 },
-            { key: 'rotY',     label: 'rotY',     min: -2.0, max:  2.0,  step: 0.05 },
-            { key: 'xSqueeze', label: 'xSqueeze', min:  0.1, max:  2.0,  step: 0.05 },
+            { key: 'baseFwd',  min: -0.2, max:  0.2,  step: 0.01 },
+            { key: 'fwdPush',  min: -2.0, max:  2.0,  step: 0.05 },
+            { key: 'droop',    min: -1.0, max:  1.0,  step: 0.05 },
+            { key: 'latX',     min: -1.0, max:  1.0,  step: 0.05 },
+            { key: 'latY',     min: -1.0, max:  1.0,  step: 0.05 },
+            { key: 'rotFwd',   min: -2.0, max:  2.0,  step: 0.05 },
+            { key: 'rotLat',   min: -2.0, max:  2.0,  step: 0.05 },
+            { key: 'rotY',     min: -2.0, max:  2.0,  step: 0.05 },
+            { key: 'xSqueeze', min:  0.1, max:  2.0,  step: 0.05 },
         ];
 
-        this._inputs = {};
-
-        for (const { key, label, min, max, step } of FIELDS) {
+        for (const { key, min, max, step } of FIELDS) {
             const row = document.createElement('div');
             row.style.cssText = 'display:flex;align-items:center;gap:4px;margin:3px 0;';
 
             const lbl = document.createElement('span');
-            lbl.textContent = label;
+            lbl.textContent = key;
             lbl.style.cssText = 'width:64px;flex-shrink:0;color:#aaa;';
             row.appendChild(lbl);
 
             const slider = document.createElement('input');
             slider.type = 'range';
             slider.min = min; slider.max = max; slider.step = step;
-            slider.value = this._renderer.bustCfg[key] ?? BUST_DEFAULTS[key];
+            slider.value = this._store.getState().bustCfg[key] ?? BUST_DEFAULTS[key];
             slider.style.cssText = 'flex:1;cursor:pointer;';
 
             const num = document.createElement('input');
@@ -106,40 +124,69 @@ export class BustDebugPanel {
             num.value = slider.value;
             num.style.cssText = 'width:52px;background:#333;color:#eee;border:1px solid #555;border-radius:3px;padding:1px 3px;font-size:10px;';
 
-            const sync = (val) => {
-                const v = parseFloat(val);
+            // Live update via slider (no history entry — too noisy while dragging)
+            slider.addEventListener('input', () => {
+                const v = parseFloat(slider.value);
+                num.value = v;
+                this._store.setBustCfg({ [key]: v });
+            });
+
+            // Commit to history on slider release and number change
+            slider.addEventListener('change', () => this._commitBustChange(key, parseFloat(slider.value)));
+            num.addEventListener('change', () => {
+                const v = parseFloat(num.value);
                 if (isNaN(v)) return;
                 slider.value = v;
-                num.value = v;
-                this._renderer.setBustCfg({ [key]: v });
-            };
-
-            slider.addEventListener('input',  () => sync(slider.value));
-            num.addEventListener('change',    () => sync(num.value));
+                this._commitBustChange(key, v);
+            });
 
             row.appendChild(slider);
             row.appendChild(num);
             panel.appendChild(row);
-
             this._inputs[key] = { slider, num };
         }
+
+        // ── Subscribe to store for external changes ───────────────────────────
+        this._storeUnsub = this._store.subscribe(() => this._syncInputs());
 
         this._el = panel;
         parent.appendChild(panel);
     }
 
+    /** Commit a slider change to CommandHistory (creates undo-able action). */
+    _commitBustChange(key, value) {
+        const prev = this._store.getState().bustCfg;
+        if (prev[key] === value) return;
+        this._history.execute(
+            new SetBustCfgCommand(prev, { ...prev, [key]: value }),
+            this._store
+        );
+    }
+
+    /** Sync UI inputs from current store state (e.g. after undo/redo). */
     _syncInputs() {
-        const cfg = this._renderer.bustCfg;
+        const cfg = this._store.getState().bustCfg;
         for (const [key, { slider, num }] of Object.entries(this._inputs)) {
-            slider.value = cfg[key];
-            num.value    = cfg[key];
+            if (cfg[key] !== undefined) {
+                slider.value = cfg[key];
+                num.value    = cfg[key];
+            }
         }
     }
 
-    show() { if (this._el) this._el.style.display = 'block'; }
-    hide() { if (this._el) this._el.style.display = 'none'; }
+    show()   { if (this._el) this._el.style.display = 'block'; }
+    hide()   { if (this._el) this._el.style.display = 'none'; }
     toggle() {
         if (!this._el) return;
         this._el.style.display = this._el.style.display === 'none' ? 'block' : 'none';
+    }
+
+    /** Cleanup — call when removing the panel. */
+    dispose() {
+        if (this._onMouseMove) document.removeEventListener('mousemove', this._onMouseMove);
+        if (this._onMouseUp)   document.removeEventListener('mouseup',   this._onMouseUp);
+        if (this._storeUnsub)  this._storeUnsub();
+        this._el?.remove();
+        this._el = null;
     }
 }

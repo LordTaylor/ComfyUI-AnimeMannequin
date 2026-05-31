@@ -36,12 +36,21 @@ export class AppStore {
         this._listeners = new Set();
     }
 
-    // Zwraca shallow kopię stanu (nie mutuj bezpośrednio).
+    // Zwraca kopię stanu. Zagnieżdżone obiekty (pose, proportions, bustCfg) są płytko klonowane
+    // żeby zewnętrzna mutacja getState().pose.head nie wpłynęła na store.
     getState() {
-        return { ...this._state };
+        const pose = {};
+        for (const [k, v] of Object.entries(this._state.pose)) pose[k] = { ...v };
+        return {
+            ...this._state,
+            pose,
+            proportions: { ...this._state.proportions },
+            bustCfg:     { ...this._state.bustCfg },
+        };
     }
 
-    // Patch stanu — merge płytki, notyfikuje subskrybentów.
+    // Patch stanu — merge płytki dla pól top-level.
+    // UWAGA: dla zagnieżdżonych pól (pose, proportions, bustCfg) używaj specific setterów poniżej.
     setState(partial) {
         this._state = { ...this._state, ...partial };
         this._notify();
@@ -53,13 +62,46 @@ export class AppStore {
         this._notify();
     }
 
-    // Subskrypcja — zwraca funkcję do anulowania.
+    // ── Specific setters (bezpieczny deep-patch dla zagnieżdżonych pól) ─────────
+
+    /** Ustaw obrót jednej kości — pozostałe kości bez zmian. */
+    setPoseBone(boneName, quat) {
+        this._state = { ...this._state, pose: { ...this._state.pose, [boneName]: { ...quat } } };
+        this._notify();
+    }
+
+    /** Zastąp całą mapę poz (np. reset / mirror / random). */
+    setPose(pose) {
+        this._state = { ...this._state, pose: { ...pose } };
+        this._notify();
+    }
+
+    /** Patch proporcji — niezmienione pola zostają. */
+    setProportions(partial) {
+        this._state = { ...this._state, proportions: { ...this._state.proportions, ...partial } };
+        this._notify();
+    }
+
+    /** Patch bust config — niezmienione pola zostają. */
+    setBustCfg(partial) {
+        this._state = { ...this._state, bustCfg: { ...this._state.bustCfg, ...partial } };
+        this._notify();
+    }
+
+    /** Ustaw rozmiar wyjściowy. */
+    setOutputSize(w, h) {
+        this._state = { ...this._state, outputWidth: w, outputHeight: h };
+        this._notify();
+    }
+
+    /** Subskrypcja — zwraca funkcję do anulowania. */
     subscribe(listener) {
         this._listeners.add(listener);
         return () => this._listeners.delete(listener);
     }
 
     _notify() {
-        for (const fn of this._listeners) fn(this._state);
+        const s = this._state;
+        for (const fn of this._listeners) fn(s);
     }
 }

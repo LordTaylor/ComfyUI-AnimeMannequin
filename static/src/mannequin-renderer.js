@@ -78,7 +78,11 @@ function sobelCanny(sourceCanvas) {
 }
 
 export class MannequinRenderer {
-    constructor(canvas) {
+    /**
+     * @param {HTMLCanvasElement} canvas
+     * @param {import('./app-store.js').AppStore|null} store  optional — enables reactive sync
+     */
+    constructor(canvas, store = null) {
         this._canvas = canvas;
         this._scene = new THREE.Scene();
         this._scene.background = new THREE.Color(0x4a4a4a);
@@ -129,8 +133,90 @@ export class MannequinRenderer {
         this._jointColorMode = 'openpose'; // 'openpose' | 'flat'
         this._proportions = defaultProportions();
         this._bustCfg = { ...BUST_DEFAULTS };
-        this._skeletonLines    = null; // THREE.Group of CylinderMesh per limb — built after mannequin loads
-        this._skeletonCylinders = null; // flat array matching SKELETON_LIMBS indices
+        this._skeletonLines    = null;
+        this._skeletonCylinders = null;
+
+        // ── Store wiring (Phase 3) ─────────────────────────────────────────────
+        this._store     = null;
+        this._storeUnsub = null;
+        if (store) this._connectStore(store);
+    }
+
+    /**
+     * Connect to AppStore — renderer will react to state changes automatically.
+     * Safe to call multiple times (disconnects previous store first).
+     */
+    _connectStore(store) {
+        if (this._storeUnsub) this._storeUnsub();
+        this._store    = store;
+        this._prevSync = {};                                      // reset diff tracker
+        const s = store.getState();
+        // Apply initial state without triggering full applyProportions (mannequin not yet built)
+        this._jointColorMode = s.jointColorMode ?? 'openpose';
+        this._proportions    = { ...s.proportions };
+        this._bustCfg        = { ...s.bustCfg };
+        this._outputWidth    = s.outputWidth  ?? this._outputWidth;
+        this._outputHeight   = s.outputHeight ?? this._outputHeight;
+        this._prevSync     = { ...s };
+        this._prevPropsJson = JSON.stringify(s.proportions);
+        this._prevCfgJson   = JSON.stringify(s.bustCfg);
+        this._storeUnsub = store.subscribe(state => this._onStoreChange(state));
+    }
+
+    /** React to store state changes — only re-applies what actually changed.
+     *  _prevSync holds the RAW internal state snapshot (not the cloned getState() output)
+     *  so reference equality checks work correctly.
+     */
+    _onStoreChange(state) {
+        const prev = this._prevSync;
+        let needsProportionSync = false;
+
+        if (state.jointColorMode !== prev.jointColorMode) {
+            this._jointColorMode = state.jointColorMode;
+            this._applyJointColorModeInternal(state.jointColorMode);
+        }
+
+        // Compare by JSON to detect actual value changes (proportions/bustCfg are always new objects)
+        const propsJson = JSON.stringify(state.proportions);
+        const cfgJson   = JSON.stringify(state.bustCfg);
+        if (propsJson !== this._prevPropsJson) {
+            this._prevPropsJson = propsJson;
+            this._proportions   = { ...state.proportions };
+            needsProportionSync = true;
+        }
+        if (cfgJson !== this._prevCfgJson) {
+            this._prevCfgJson = cfgJson;
+            this._bustCfg     = { ...state.bustCfg };
+            needsProportionSync = true;
+        }
+
+        if (needsProportionSync && this._bones.size) {
+            this.applyProportions({});
+        }
+
+        if (state.outputWidth !== prev.outputWidth || state.outputHeight !== prev.outputHeight) {
+            this._outputWidth  = state.outputWidth;
+            this._outputHeight = state.outputHeight;
+            this._depthTarget.setSize(state.outputWidth, state.outputHeight);
+        }
+
+        if (state.groundEnabled !== prev.groundEnabled) {
+            this._groundEnabled = state.groundEnabled;
+            this._ground.visible = state.groundEnabled;
+        }
+
+        this._prevSync = state;
+        this._dirty = true;
+    }
+
+    /** Internal — sets joint color mode WITHOUT going through store (avoids infinite loop). */
+    _applyJointColorModeInternal(mode) {
+        this._applyJointColors(mode);
+        if (this._skeletonLines) this._skeletonLines.visible = (mode === 'openpose');
+        this._scene.traverse(o => {
+            if (o.userData.isJoint && !o.userData.isHitTarget) o.visible = (mode !== 'openpose');
+        });
+        this._applyChestJointVisibility();
     }
 
     get camera() { return this._camera; }
@@ -143,17 +229,20 @@ export class MannequinRenderer {
     get groundEnabled() { return this._groundEnabled; }
     get bustCfg() { return { ...this._bustCfg }; }
     setBustCfg(partial) {
+        if (this._store) { this._store.setBustCfg(partial); return; }
         Object.assign(this._bustCfg, partial);
-        this.applyProportions({});   // re-apply with new config
+        this.applyProportions({});
     }
 
     setGroundVisible(enabled) {
+        if (this._store) { this._store.setState({ groundEnabled: enabled }); return; }
         this._groundEnabled = enabled;
         this._ground.visible = enabled;
         this._dirty = true;
     }
 
     setOutputSize(w, h) {
+        if (this._store) { this._store.setOutputSize(w, h); return; }
         this._outputWidth  = w;
         this._outputHeight = h;
         this._depthTarget.setSize(w, h);
@@ -212,18 +301,14 @@ export class MannequinRenderer {
     }
 
     setJointColorMode(mode) {
+        if (this._store) {
+            // Delegate to store → _onStoreChange will apply internally
+            this._store.setState({ jointColorMode: mode });
+            return;
+        }
+        // Legacy (no store)
         this._jointColorMode = mode;
-        this._applyJointColors(mode);
-        // In openpose mode: show skeleton lines, hide colored joint dots.
-        // In flat mode: hide skeleton lines, show joint dots for editing feedback.
-        if (this._skeletonLines) this._skeletonLines.visible = (mode === 'openpose');
-        this._scene.traverse(o => {
-            if (o.userData.isJoint && !o.userData.isHitTarget) {
-                o.visible = (mode !== 'openpose');
-            }
-        });
-        // Re-apply chest joint hide — the traverse above would re-show it.
-        this._applyChestJointVisibility();
+        this._applyJointColorModeInternal(mode);
         this._dirty = true;
     }
 
@@ -620,6 +705,7 @@ export class MannequinRenderer {
     }
 
     dispose() {
+        if (this._storeUnsub) { this._storeUnsub(); this._storeUnsub = null; }
         this._scene.traverse(obj => {
             obj.geometry?.dispose();
             obj.material?.dispose();

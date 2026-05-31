@@ -1,0 +1,145 @@
+/**
+ * Tests: AppStore specific setters — pre-Phase 3 fixes
+ */
+
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('../../static/src/mannequin-renderer.js', () => ({
+    BUST_DEFAULTS: { baseFwd:0, fwdPush:0.65, droop:0.2, latX:0.18, latY:0.3,
+                     rotFwd:0.6, rotLat:-0.5, rotY:0.5, xSqueeze:1.0 },
+}));
+vi.mock('../../static/src/mannequin-model.js', () => ({
+    defaultProportions: () => ({ head:1, bust:1, hips:1, waist:1, legs:1, arms:1 }),
+}));
+
+const { AppStore, defaultState } = await import('../../static/src/app-store.js');
+
+const mkStore = () => new AppStore(defaultState());
+
+const Q0 = { x:0, y:0, z:0, w:1 };
+const Q1 = { x:0.1, y:0.2, z:0.3, w:0.9 };
+
+// ── setPoseBone ───────────────────────────────────────────────────────────────
+
+describe('setPoseBone', () => {
+    it('adds bone to empty pose', () => {
+        const s = mkStore();
+        s.setPoseBone('head', Q1);
+        expect(s.getState().pose.head).toEqual(Q1);
+    });
+
+    it('does not destroy other bones', () => {
+        const s = mkStore();
+        s.setPoseBone('head', Q1);
+        s.setPoseBone('neck', Q0);
+        expect(s.getState().pose.head).toEqual(Q1);
+        expect(s.getState().pose.neck).toEqual(Q0);
+    });
+
+    it('overwrites existing bone', () => {
+        const s = mkStore();
+        s.setPoseBone('head', Q0);
+        s.setPoseBone('head', Q1);
+        expect(s.getState().pose.head).toEqual(Q1);
+    });
+
+    it('returned quat is a copy — mutation does not affect store', () => {
+        const s = mkStore();
+        s.setPoseBone('head', Q1);
+        const q = s.getState().pose.head;
+        q.x = 99;
+        expect(s.getState().pose.head.x).toBe(Q1.x);
+    });
+
+    it('notifies subscribers', () => {
+        const s = mkStore(); const spy = vi.fn();
+        s.subscribe(spy);
+        s.setPoseBone('head', Q1);
+        expect(spy).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ── setPose ───────────────────────────────────────────────────────────────────
+
+describe('setPose', () => {
+    it('replaces full pose map', () => {
+        const s = mkStore();
+        s.setPoseBone('head', Q0);
+        s.setPose({ neck: Q1 });
+        expect(s.getState().pose).toEqual({ neck: Q1 });
+        expect(s.getState().pose.head).toBeUndefined();
+    });
+
+    it('empty pose is valid', () => {
+        const s = mkStore();
+        s.setPoseBone('head', Q1);
+        s.setPose({});
+        expect(s.getState().pose).toEqual({});
+    });
+});
+
+// ── setProportions ────────────────────────────────────────────────────────────
+
+describe('setProportions', () => {
+    it('patches single field, others unchanged', () => {
+        const s = mkStore();
+        s.setProportions({ bust: 1.5 });
+        const p = s.getState().proportions;
+        expect(p.bust).toBe(1.5);
+        expect(p.head).toBe(1);
+        expect(p.hips).toBe(1);
+    });
+
+    it('multiple fields at once', () => {
+        const s = mkStore();
+        s.setProportions({ bust: 1.5, legs: 0.9 });
+        expect(s.getState().proportions.bust).toBe(1.5);
+        expect(s.getState().proportions.legs).toBe(0.9);
+        expect(s.getState().proportions.hips).toBe(1);
+    });
+
+    it('notifies subscribers', () => {
+        const s = mkStore(); const spy = vi.fn();
+        s.subscribe(spy);
+        s.setProportions({ bust: 2 });
+        expect(spy).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ── setBustCfg ────────────────────────────────────────────────────────────────
+
+describe('setBustCfg', () => {
+    it('patches single key, others unchanged', () => {
+        const s = mkStore();
+        const orig = s.getState().bustCfg;
+        s.setBustCfg({ latY: 0.9 });
+        expect(s.getState().bustCfg.latY).toBe(0.9);
+        expect(s.getState().bustCfg.fwdPush).toBe(orig.fwdPush);
+    });
+
+    it('successive patches accumulate', () => {
+        const s = mkStore();
+        s.setBustCfg({ latY: 0.9 });
+        s.setBustCfg({ droop: 0.5 });
+        expect(s.getState().bustCfg.latY).toBe(0.9);
+        expect(s.getState().bustCfg.droop).toBe(0.5);
+    });
+});
+
+// ── setOutputSize ─────────────────────────────────────────────────────────────
+
+describe('setOutputSize', () => {
+    it('sets both dimensions atomically', () => {
+        const s = mkStore();
+        s.setOutputSize(512, 768);
+        expect(s.getState().outputWidth).toBe(512);
+        expect(s.getState().outputHeight).toBe(768);
+    });
+
+    it('single notification for both fields', () => {
+        const s = mkStore(); const spy = vi.fn();
+        s.subscribe(spy);
+        s.setOutputSize(512, 768);
+        expect(spy).toHaveBeenCalledTimes(1);
+    });
+});

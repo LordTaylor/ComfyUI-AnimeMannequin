@@ -72,16 +72,8 @@ export class RotateBoneCommand extends Command {
         this._next     = { ...nextQuat };
     }
 
-    execute(store) {
-        const pose = { ...store.getState().pose, [this._boneName]: { ...this._next } };
-        store.setState({ pose });
-    }
-
-    undo(store) {
-        const pose = { ...store.getState().pose, [this._boneName]: { ...this._prev } };
-        store.setState({ pose });
-    }
-
+    execute(store) { store.setPoseBone(this._boneName, this._next); }
+    undo(store)    { store.setPoseBone(this._boneName, this._prev); }
     get description() { return `Rotate ${this._boneName}`; }
 }
 
@@ -95,14 +87,11 @@ export class SetProportionsCommand extends Command {
         this._next = { ...next };
     }
 
-    execute(store) { store.setState({ proportions: { ...this._next } }); }
-    undo(store)    { store.setState({ proportions: { ...this._prev } }); }
+    execute(store) { store.setProportions(this._next); }
+    undo(store)    { store.setProportions(this._prev); }
     get description() { return 'Set proportions'; }
 }
 
-/**
- * Zmiana jednego lub wielu parametrów bust config.
- */
 export class SetBustCfgCommand extends Command {
     constructor(prevCfg, nextCfg) {
         super();
@@ -110,14 +99,11 @@ export class SetBustCfgCommand extends Command {
         this._next = { ...nextCfg };
     }
 
-    execute(store) { store.setState({ bustCfg: { ...this._next } }); }
-    undo(store)    { store.setState({ bustCfg: { ...this._prev } }); }
+    execute(store) { store.setBustCfg(this._next); }
+    undo(store)    { store.setBustCfg(this._prev); }
     get description() { return 'Set bust config'; }
 }
 
-/**
- * Zmiana płci — resetuje posę do domyślnej.
- */
 export class SetGenderCommand extends Command {
     constructor(prevGender, nextGender, prevPose, defaultPose) {
         super();
@@ -127,14 +113,12 @@ export class SetGenderCommand extends Command {
         this._defaultPose = { ...defaultPose };
     }
 
+    // Single setState → single notification (avoid double renderer sync)
     execute(store) { store.setState({ gender: this._nextGender, pose: { ...this._defaultPose } }); }
     undo(store)    { store.setState({ gender: this._prevGender, pose: { ...this._prevPose } }); }
     get description() { return `Set gender ${this._nextGender}`; }
 }
 
-/**
- * Reset pozy — przywraca domyślną pozę przy zachowaniu proporcji.
- */
 export class ResetPoseCommand extends Command {
     constructor(prevPose, defaultPose) {
         super();
@@ -142,14 +126,11 @@ export class ResetPoseCommand extends Command {
         this._default = { ...defaultPose };
     }
 
-    execute(store) { store.setState({ pose: { ...this._default } }); }
-    undo(store)    { store.setState({ pose: { ...this._prev } }); }
+    execute(store) { store.setPose(this._default); }
+    undo(store)    { store.setPose(this._prev); }
     get description() { return 'Reset pose'; }
 }
 
-/**
- * Odbicie pozy (L↔R mirror).
- */
 export class MirrorPoseCommand extends Command {
     constructor(prevPose, mirroredPose, direction) {
         super();
@@ -158,29 +139,24 @@ export class MirrorPoseCommand extends Command {
         this._dir      = direction;
     }
 
-    execute(store) { store.setState({ pose: { ...this._mirrored } }); }
-    undo(store)    { store.setState({ pose: { ...this._prev } }); }
+    execute(store) { store.setPose(this._mirrored); }
+    undo(store)    { store.setPose(this._prev); }
     get description() { return `Mirror pose ${this._dir}`; }
 }
 
-/**
- * Losowa poza.
- */
 export class RandomPoseCommand extends Command {
     constructor(prevPose, randomPose) {
         super();
+        if (!randomPose || typeof randomPose !== 'object') throw new Error('RandomPoseCommand: randomPose is required');
         this._prev   = { ...prevPose };
         this._random = { ...randomPose };
     }
 
-    execute(store) { store.setState({ pose: { ...this._random } }); }
-    undo(store)    { store.setState({ pose: { ...this._prev } }); }
+    execute(store) { store.setPose(this._random); }
+    undo(store)    { store.setPose(this._prev); }
     get description() { return 'Random pose'; }
 }
 
-/**
- * Zmiana trybu kolorów jointów.
- */
 export class SetJointColorModeCommand extends Command {
     constructor(prev, next) {
         super();
