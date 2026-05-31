@@ -119,6 +119,8 @@ export class MannequinEditor {
     }
 
     // [minX, maxX, minY, maxY, minZ, maxZ] in degrees
+    // Hinge joints (forearm, shin) constrained to one bending direction only,
+    // near-zero Y/Z — they do NOT bend backwards or sideways.
     static RANDOM_LIMITS_SAFE = {
         torso:       null,
         spine:       [-15, 15, -20, 20, -12, 12],
@@ -127,18 +129,18 @@ export class MannequinEditor {
         head:        [-18, 18, -30, 30, -12, 12],
         shoulder_L:  [-30, 55, -25, 25, -70, 50],
         upper_arm_L: [-80, 50, -50, 50, -25, 25],
-        forearm_L:   [  0, 100, -8,  8,  -8,  8],
+        forearm_L:   [  0, 100,  -4,  4,  -4,  4], // hinge: X≥0 only, tight Y/Z
         hand_L:      [-25, 25, -25, 25, -15, 15],
         shoulder_R:  [-30, 55, -25, 25, -50, 70],
         upper_arm_R: [-80, 50, -50, 50, -25, 25],
-        forearm_R:   [  0, 100, -8,  8,  -8,  8],
+        forearm_R:   [  0, 100,  -4,  4,  -4,  4], // hinge
         hand_R:      [-25, 25, -25, 25, -15, 15],
         pelvis:      [-12, 12, -12, 12,  -8,  8],
         thigh_L:     [-55, 35, -25, 25, -35, 15],
-        shin_L:      [-100, 0,  -4,  4,  -4,  4],
+        shin_L:      [-100,  0,  -4,  4,  -4,  4], // hinge: X≤0 only
         foot_L:      [-25, 25, -12, 12, -12, 12],
         thigh_R:     [-55, 35, -25, 25, -15, 35],
-        shin_R:      [-100, 0,  -4,  4,  -4,  4],
+        shin_R:      [-100,  0,  -4,  4,  -4,  4], // hinge
         foot_R:      [-25, 25, -12, 12, -12, 12],
     };
 
@@ -150,18 +152,18 @@ export class MannequinEditor {
         head:        [-40, 40, -65, 65, -30, 30],
         shoulder_L:  [-60,130, -60, 60, -120, 90],
         upper_arm_L: [-130, 90, -90, 90, -60, 60],
-        forearm_L:   [  0, 145, -20, 20, -20, 20],
+        forearm_L:   [  0, 145,  -6,  6,  -6,  6], // hinge: never backwards, minimal Y/Z
         hand_L:      [-60, 60, -60, 60, -40, 40],
         shoulder_R:  [-60,130, -60, 60,  -90,120],
         upper_arm_R: [-130, 90, -90, 90, -60, 60],
-        forearm_R:   [  0, 145, -20, 20, -20, 20],
+        forearm_R:   [  0, 145,  -6,  6,  -6,  6], // hinge
         hand_R:      [-60, 60, -60, 60, -40, 40],
         pelvis:      [-30, 30, -30, 30, -20, 20],
         thigh_L:     [-100, 75, -55, 55, -75, 40],
-        shin_L:      [-140,  0, -12, 12, -12, 12],
+        shin_L:      [-140,   0,  -6,  6,  -6,  6], // hinge: never forward
         foot_L:      [-60, 60, -30, 30, -30, 30],
         thigh_R:     [-100, 75, -55, 55, -40, 75],
-        shin_R:      [-140,  0, -12, 12, -12, 12],
+        shin_R:      [-140,   0,  -6,  6,  -6,  6], // hinge
         foot_R:      [-60, 60, -30, 30, -30, 30],
     };
 
