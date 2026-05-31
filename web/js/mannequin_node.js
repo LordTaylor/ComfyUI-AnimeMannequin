@@ -141,15 +141,18 @@ function openMannequinModal(node) {
             setStatus("Capturing...", "#FFA500");
             const images = await invoke(iframe.contentWindow, "MakeImages", [], 20000);
 
-            // Upload pose + depth
+            // Upload pose + depth + canny
             const poseFile  = await uploadImage(images.pose,  "mannequin_pose.png");
             const depthFile = await uploadImage(images.depth, "mannequin_depth.png");
+            const cannyFile = await uploadImage(images.canny, "mannequin_canny.png");
 
             // Update node widgets
             const pw = node.widgets?.find(w => w.name === "pose_file");
             const dw = node.widgets?.find(w => w.name === "depth_file");
+            const cw = node.widgets?.find(w => w.name === "canny_file");
             if (pw) pw.value = poseFile;
             if (dw) dw.value = depthFile;
+            if (cw) cw.value = cannyFile;
 
             // Save scene for restore
             const scene = await invoke(iframe.contentWindow, "GetSceneData", [], 5000);
@@ -226,7 +229,7 @@ app.registerExtension({
             // Make file widgets read-only
             setTimeout(() => {
                 for (const w of this.widgets ?? []) {
-                    if (["pose_file", "depth_file"].includes(w.name)) w.disabled = true;
+                    if (["pose_file", "depth_file", "canny_file"].includes(w.name)) w.disabled = true;
                 }
             }, 100);
         };
