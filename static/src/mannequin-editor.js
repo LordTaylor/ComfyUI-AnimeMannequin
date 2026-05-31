@@ -123,25 +123,25 @@ export class MannequinEditor {
     // near-zero Y/Z — they do NOT bend backwards or sideways.
     static RANDOM_LIMITS_SAFE = {
         torso:       null,
-        spine:       [-15, 15, -20, 20, -12, 12],
-        chest:       [-12, 12, -12, 12,  -8,  8],
-        neck:        [-25, 25, -35, 35, -15, 15],
-        head:        [-18, 18, -30, 30, -12, 12],
-        shoulder_L:  [-30, 55, -25, 25, -70, 50],
-        upper_arm_L: [-80, 50, -50, 50, -25, 25],
-        forearm_L:   [  0, 100,  -4,  4,  -4,  4], // hinge: X≥0 only, tight Y/Z
-        hand_L:      [-25, 25, -25, 25, -15, 15],
-        shoulder_R:  [-30, 55, -25, 25, -50, 70],
-        upper_arm_R: [-80, 50, -50, 50, -25, 25],
-        forearm_R:   [  0, 100,  -4,  4,  -4,  4], // hinge
-        hand_R:      [-25, 25, -25, 25, -15, 15],
-        pelvis:      [-12, 12, -12, 12,  -8,  8],
-        thigh_L:     [-55, 35, -25, 25, -35, 15],
-        shin_L:      [-100,  0,  -4,  4,  -4,  4], // hinge: X≤0 only
-        foot_L:      [-25, 25, -12, 12, -12, 12],
-        thigh_R:     [-55, 35, -25, 25, -15, 35],
-        shin_R:      [-100,  0,  -4,  4,  -4,  4], // hinge
-        foot_R:      [-25, 25, -12, 12, -12, 12],
+        spine:       [ -8,  8, -12, 12,  -6,  6],
+        chest:       [ -8,  8,  -8,  8,  -5,  5],
+        neck:        [-15, 15, -20, 20, -10, 10],
+        head:        [-12, 12, -20, 20,  -8,  8],
+        shoulder_L:  [-20, 40, -18, 18, -50, 25],
+        upper_arm_L: [-55, 30, -35, 35, -18, 18],
+        forearm_L:   [  0, 80,  -4,  4,  -4,  4], // hinge: X≥0 only
+        hand_L:      [-18, 18, -18, 18, -10, 10],
+        shoulder_R:  [-20, 40, -18, 18, -25, 50],
+        upper_arm_R: [-55, 30, -35, 35, -18, 18],
+        forearm_R:   [  0, 80,  -4,  4,  -4,  4], // hinge
+        hand_R:      [-18, 18, -18, 18, -10, 10],
+        pelvis:      [ -6,  6,  -6,  6,  -4,  4],
+        thigh_L:     [-35, 20, -18, 18, -20, 10],
+        shin_L:      [-70,  0,  -4,  4,  -4,  4], // hinge: X≤0 only
+        foot_L:      [-18, 18,  -8,  8,  -8,  8],
+        thigh_R:     [-35, 20, -18, 18, -10, 20],
+        shin_R:      [-70,  0,  -4,  4,  -4,  4], // hinge
+        foot_R:      [-18, 18,  -8,  8,  -8,  8],
     };
 
     static RANDOM_LIMITS_WILD = {

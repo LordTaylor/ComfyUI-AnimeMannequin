@@ -6,36 +6,56 @@
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: #1a1a1a; color: #eee; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
-#toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #2a2a2a; border-bottom: 1px solid #444; flex-shrink: 0; flex-wrap: wrap; }
-#toolbar h1 { font-size: 13px; font-weight: bold; flex: 1; color: #fff; min-width: 80px; }
-button { padding: 5px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
+#toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #2a2a2a; border-bottom: 1px solid #444; flex-shrink: 0; }
+#toolbar h1 { font-size: 13px; font-weight: bold; color: #fff; margin-right: 4px; }
+.toolbar-sep { width: 1px; height: 20px; background: #555; margin: 0 2px; flex-shrink: 0; }
+button { padding: 5px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; white-space: nowrap; }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 #btn-gender { background: #1565c0; color: #fff; min-width: 36px; }
-#btn-undo   { background: #333; color: #aaa; }
-#btn-reset  { background: #333; color: #aaa; }
-#btn-poses  { background: #333; color: #aaa; }
-#btn-mirror-lr { background: #333; color: #aaa; }
-#btn-mirror-rl { background: #333; color: #aaa; }
-#btn-colors  { background: #333; color: #aaa; min-width: 62px; }
-#btn-colors.active { background: #555; color: #fff; }
-#btn-random      { background: #6a1b9a; color: #fff; }
+#btn-undo, #btn-reset { background: #333; color: #aaa; }
+#btn-mirror-lr, #btn-mirror-rl { background: #333; color: #aaa; }
+#btn-poses { background: #333; color: #aaa; }
+#btn-random { background: #6a1b9a; color: #fff; }
 #btn-random-mode { background: #333; color: #aaa; padding: 5px 8px; font-size: 14px; }
 #btn-random-mode.wild { background: #bf360c; color: #fff; }
 #btn-props { background: #333; color: #aaa; }
-#btn-props.active { background: #555; color: #fff; }
-#btn-save   { background: #2e7d32; color: #fff; display: none; min-width: 100px; }
+#btn-props.active { background: #4a6080; color: #cdf; }
+#btn-colors { background: #333; color: #aaa; min-width: 68px; }
+#btn-colors.active { background: #555; color: #fff; }
+#btn-save { background: #2e7d32; color: #fff; display: none; min-width: 110px; margin-left: auto; }
 #btn-save.saving { background: #1b5e20; }
-#btn-dl-pose  { background: #1565c0; color: #fff; display: none; }
-#btn-dl-depth { background: #1565c0; color: #fff; display: none; }
-#btn-dl-canny { background: #1565c0; color: #fff; display: none; }
-#status { font-size: 11px; color: #888; padding: 0 4px; white-space: nowrap; }
+
 #canvas-wrap { flex: 1; position: relative; overflow: hidden; }
 canvas { display: block; width: 100%; height: 100%; }
 
-/* Loading overlay — pointer-events:none always so canvas events are never blocked */
+/* Floating export buttons — standalone only, bottom-left of canvas */
+#export-bar {
+    display: none;
+    position: absolute; bottom: 12px; left: 12px;
+    gap: 6px; z-index: 10;
+    flex-direction: column; align-items: flex-start;
+}
+#export-bar button {
+    background: rgba(21,101,192,0.85); color: #fff;
+    backdrop-filter: blur(4px);
+    padding: 6px 14px; font-size: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}
+#export-bar button:hover { background: rgba(21,101,192,1); }
+
+/* ComfyUI status overlay — bottom of canvas */
+#status-bar {
+    display: none;
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 4px 12px; background: rgba(0,0,0,0.55);
+    font-size: 11px; color: #aaa;
+    pointer-events: none;
+}
+
+/* Loading overlay */
 #loading-overlay {
     position: absolute; inset: 0;
-    background: rgba(20, 20, 20, 0.85);
+    background: rgba(20,20,20,0.85);
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     z-index: 999; gap: 16px;
@@ -45,10 +65,8 @@ canvas { display: block; width: 100%; height: 100%; }
 #loading-overlay.hidden { opacity: 0; }
 .spinner {
     width: 48px; height: 48px;
-    border: 4px solid #444;
-    border-top-color: #4fc3f7;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+    border: 4px solid #444; border-top-color: #4fc3f7;
+    border-radius: 50%; animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 #loading-msg { font-size: 14px; color: #ccc; letter-spacing: 0.03em; }
@@ -56,25 +74,37 @@ canvas { display: block; width: 100%; height: 100%; }
 </head>
 <body>
 <div id="toolbar">
-  <h1>Anime Mannequin</h1>
+  <h1>Mannequin</h1>
+  <div class="toolbar-sep"></div>
   <button id="btn-gender" title="Toggle gender (F / M)">F</button>
-  <button id="btn-undo" title="Undo last rotation (Ctrl+Z)">Undo</button>
-  <button id="btn-reset" title="Reset all bones to default pose">Reset</button>
-  <button id="btn-mirror-lr" title="Mirror pose: copy left side → right side">L→R</button>
-  <button id="btn-mirror-rl" title="Mirror pose: copy right side → left side">R→L</button>
-  <button id="btn-poses" title="Open saved pose library">Poses</button>
-  <button id="btn-random" title="Generate random pose">Random</button>
+  <div class="toolbar-sep"></div>
+  <button id="btn-undo"      title="Undo last rotation (Ctrl+Z)">Undo</button>
+  <button id="btn-reset"     title="Reset all bones to default pose">Reset</button>
+  <button id="btn-mirror-lr" title="Copy left side → right side">L→R</button>
+  <button id="btn-mirror-rl" title="Copy right side → left side">R→L</button>
+  <div class="toolbar-sep"></div>
+  <button id="btn-poses"       title="Open saved pose library">Poses</button>
+  <button id="btn-random"      title="Generate random pose">Random</button>
   <button id="btn-random-mode" title="Safe: anatomical limits  |  click for Wild">🔒</button>
-  <button id="btn-props" title="Body proportions: head, bust, hips, waist, legs, arms">Props</button>
-  <button id="btn-colors" class="active" title="Toggle joint color mode: OpenPose colors / flat grey">OpenPose</button>
-  <span id="status">Loading...</span>
+  <div class="toolbar-sep"></div>
+  <button id="btn-props"   title="Body proportions panel (head, bust, hips, waist, legs, arms)">Props</button>
+  <button id="btn-colors" class="active" title="Toggle joint colors: OpenPose rainbow / flat grey">OpenPose</button>
   <button id="btn-save" title="Capture images and save to ComfyUI node">Close &amp; Save</button>
-  <button id="btn-dl-pose" title="Download pose render as PNG">pose.png</button>
-  <button id="btn-dl-depth" title="Download depth map as PNG">depth.png</button>
-  <button id="btn-dl-canny" title="Download Canny edge map as PNG">canny.png</button>
 </div>
+
 <div id="canvas-wrap">
   <canvas id="c"></canvas>
+
+  <!-- standalone download buttons — float over canvas, bottom-left -->
+  <div id="export-bar">
+    <button id="btn-dl-pose"  title="Download pose render as PNG">⬇ pose.png</button>
+    <button id="btn-dl-depth" title="Download depth map as PNG">⬇ depth.png</button>
+    <button id="btn-dl-canny" title="Download Canny edge map as PNG">⬇ canny.png</button>
+  </div>
+
+  <!-- comfyui progress — bottom strip -->
+  <div id="status-bar"><span id="status">Ready</span></div>
+
   <div id="loading-overlay">
     <div class="spinner"></div>
     <div id="loading-msg">Loading model…</div>
@@ -91,7 +121,7 @@ import { PoseLibrary } from './src/pose-library.js';
 import { ProportionsPanel } from './src/proportions-panel.js';
 
 const params = new URLSearchParams(location.search);
-const mode   = params.get('mode') ?? 'standalone'; // 'comfyui' | 'standalone'
+const mode   = params.get('mode') ?? 'standalone';
 
 const canvas   = document.getElementById('c');
 const renderer = new MannequinRenderer(canvas);
@@ -102,23 +132,16 @@ poseLib.mount(document.body);
 const propsPanel = new ProportionsPanel(renderer);
 propsPanel.mount(document.body);
 
-// Loading overlay helpers
 const loadingOverlay = document.getElementById('loading-overlay');
 const loadingMsg     = document.getElementById('loading-msg');
-function showLoading(msg = 'Loading model…') {
-    loadingMsg.textContent = msg;
-    loadingOverlay.classList.remove('hidden');
-}
-function hideLoading() {
-    loadingOverlay.classList.add('hidden');
-}
+function showLoading(msg = 'Loading model…') { loadingMsg.textContent = msg; loadingOverlay.classList.remove('hidden'); }
+function hideLoading() { loadingOverlay.classList.add('hidden'); }
 
-// Restore pose from URL ?scene= param (set by mannequin_node.js)
 let initScene = null;
 try {
     const sceneParam = params.get('scene');
     if (sceneParam) initScene = jsonToScene(decodeURIComponent(sceneParam));
-} catch { /* malformed — start fresh */ }
+} catch { /* malformed */ }
 
 const gender = params.get('gender') ?? initScene?.gender ?? 'F';
 showLoading(`Loading ${gender === 'F' ? 'female' : 'male'} model…`);
@@ -130,13 +153,10 @@ try {
     loadingMsg.textContent = `Failed to load model — ${err.message}`;
     loadingMsg.style.color = '#f44';
     document.querySelector('.spinner').style.display = 'none';
-    // overlay stays visible with error message (pointer-events:none so canvas still works)
 }
 
-// Wire toolbar
+// ── Toolbar ──────────────────────────────────────────────────────────────────
 const btnGender = document.getElementById('btn-gender');
-const status    = document.getElementById('status');
-
 btnGender.textContent = gender;
 btnGender.addEventListener('click', async () => {
     if (btnGender.disabled) return;
@@ -152,6 +172,7 @@ btnGender.addEventListener('click', async () => {
         hideLoading();
     }
 });
+
 document.getElementById('btn-undo').addEventListener('click', () => editor.undo());
 document.getElementById('btn-reset').addEventListener('click', () => editor.resetPose());
 document.getElementById('btn-mirror-lr').addEventListener('click', () => editor.mirrorPose('L_to_R'));
@@ -185,9 +206,13 @@ btnColors.addEventListener('click', () => {
     renderer.setJointColorMode(colorMode);
 });
 
-// ComfyUI mode
+// ── ComfyUI mode ─────────────────────────────────────────────────────────────
 if (mode === 'comfyui') {
     new ComfyuiBridge(editor, renderer);
+    const statusBar = document.getElementById('status-bar');
+    const statusEl  = document.getElementById('status');
+    statusBar.style.display = 'block';
+
     const btnSave = document.getElementById('btn-save');
     btnSave.style.display = 'inline-block';
     btnSave.addEventListener('click', () => {
@@ -195,56 +220,50 @@ if (mode === 'comfyui') {
         btnSave.disabled = true;
         btnSave.textContent = 'Saving…';
         btnSave.classList.add('saving');
-        status.textContent = 'Uploading…';
+        statusEl.textContent = 'Uploading…';
         window.parent.postMessage(
             { cmd: 'mannequin', type: 'event', method: 'UserSaved' },
             window.location.origin
         );
-        // Re-enable after 30 s in case parent never closes the modal (error recovery)
         setTimeout(() => {
             btnSave.disabled = false;
             btnSave.textContent = 'Close & Save';
             btnSave.classList.remove('saving');
-            if (status.textContent === 'Uploading…') status.textContent = 'Ready';
+            if (statusEl.textContent === 'Uploading…') statusEl.textContent = 'Ready';
         }, 30000);
     });
 }
 
-// Standalone mode
+// ── Standalone mode ───────────────────────────────────────────────────────────
 if (mode === 'standalone') {
+    const exportBar = document.getElementById('export-bar');
+    exportBar.style.display = 'flex';
+
     function download(dataUrl, name) {
         const a = document.createElement('a');
         a.href = dataUrl; a.download = name; a.click();
     }
-    function withFeedback(btn, label, fn) {
+    function withFeedback(btn, fn) {
         btn.addEventListener('click', async () => {
             if (btn.disabled) return;
             btn.disabled = true;
             const orig = btn.textContent;
             btn.textContent = '…';
-            try { await fn(); } finally {
+            try { fn(); } finally {
                 btn.disabled = false;
                 btn.textContent = orig;
             }
         });
     }
-    const dlPose  = document.getElementById('btn-dl-pose');
-    const dlDepth = document.getElementById('btn-dl-depth');
-    const dlCanny = document.getElementById('btn-dl-canny');
-    dlPose.style.display  = 'inline-block';
-    dlDepth.style.display = 'inline-block';
-    dlCanny.style.display = 'inline-block';
-    withFeedback(dlPose,  'pose.png',  async () => { const { pose }  = renderer.captureImages(); download(pose,  'pose.png');  });
-    withFeedback(dlDepth, 'depth.png', async () => { const { depth } = renderer.captureImages(); download(depth, 'depth.png'); });
-    withFeedback(dlCanny, 'canny.png', async () => { const { canny } = renderer.captureImages(); download(canny, 'canny.png'); });
+    withFeedback(document.getElementById('btn-dl-pose'),  () => { const { pose }  = renderer.captureImages(); download(pose,  'pose.png');  });
+    withFeedback(document.getElementById('btn-dl-depth'), () => { const { depth } = renderer.captureImages(); download(depth, 'depth.png'); });
+    withFeedback(document.getElementById('btn-dl-canny'), () => { const { canny } = renderer.captureImages(); download(canny, 'canny.png'); });
 }
 
-status.textContent = 'Ready';
-
-// Render loop — only renders when dirty
+// ── Render loop ───────────────────────────────────────────────────────────────
 function loop() {
     requestAnimationFrame(loop);
-    editor.update(); // orbit damping
+    editor.update();
     if (renderer._dirty) {
         const wrap = document.getElementById('canvas-wrap');
         renderer.render(wrap.clientWidth, wrap.clientHeight);
