@@ -67,6 +67,8 @@ async function loadGLB(gender) {
     if (_glbCache.has(key)) return _glbCache.get(key);
     const loader = new GLTFLoader();
     const gltf = await loader.loadAsync(`/mannequin_editor/assets/${key}.glb`);
+    // Ensure world matrices are computed before getWorldPosition calls
+    gltf.scene.updateMatrixWorld(true);
     // Build name → Object3D map
     const nodeMap = new Map();
     gltf.scene.traverse(obj => { if (obj.name) nodeMap.set(obj.name, obj); });
