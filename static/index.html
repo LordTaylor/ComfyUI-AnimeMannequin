@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Anime Mannequin Editor</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #1a1a1a; color: #eee; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
+#toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #2a2a2a; border-bottom: 1px solid #444; flex-shrink: 0; }
+#toolbar h1 { font-size: 13px; font-weight: bold; flex: 1; color: #fff; }
+button { padding: 5px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
+#btn-gender { background: #1565c0; color: #fff; min-width: 36px; }
+#btn-undo   { background: #333; color: #aaa; }
+#btn-reset  { background: #333; color: #aaa; }
+#btn-save   { background: #2e7d32; color: #fff; display: none; }
+#btn-dl-pose  { background: #1565c0; color: #fff; display: none; }
+#btn-dl-depth { background: #1565c0; color: #fff; display: none; }
+#status { font-size: 11px; color: #888; padding: 0 8px; }
+#canvas-wrap { flex: 1; position: relative; overflow: hidden; }
+canvas { display: block; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <h1>Anime Mannequin</h1>
+  <button id="btn-gender">F</button>
+  <button id="btn-undo">Undo</button>
+  <button id="btn-reset">Reset</button>
+  <span id="status">Loading...</span>
+  <button id="btn-save">Close &amp; Save</button>
+  <button id="btn-dl-pose">pose.png</button>
+  <button id="btn-dl-depth">depth.png</button>
+</div>
+<div id="canvas-wrap">
+  <canvas id="c"></canvas>
+</div>
+
+<script type="module">
+import * as THREE from './lib/three.module.js';
+import { MannequinRenderer } from './src/mannequin-renderer.js';
+import { MannequinEditor }   from './src/mannequin-editor.js';
+import { ComfyuiBridge }     from './src/comfyui-bridge.js';
+import { defaultScene, jsonToScene } from './src/mannequin-model.js';
+
+const params = new URLSearchParams(location.search);
+const mode   = params.get('mode') ?? 'standalone'; // 'comfyui' | 'standalone'
+
+const canvas   = document.getElementById('c');
+const renderer = new MannequinRenderer(canvas);
+const editor   = new MannequinEditor(renderer, canvas);
+
+// Restore pose from URL ?scene= param (set by mannequin_node.js)
+let initScene = null;
+try {
+    const sceneParam = params.get('scene');
+    if (sceneParam) initScene = jsonToScene(decodeURIComponent(sceneParam));
+} catch { /* malformed — start fresh */ }
+
+const gender = params.get('gender') ?? initScene?.gender ?? 'F';
+editor.buildMannequin(gender, initScene ?? defaultScene(gender));
+
+// Wire toolbar
+const btnGender = document.getElementById('btn-gender');
+const btnUndo   = document.getElementById('btn-undo');
+const btnReset  = document.getElementById('btn-reset');
+const status    = document.getElementById('status');
+
+btnGender.textContent = gender;
+btnGender.addEventListener('click', () => {
+    const next = editor.gender === 'F' ? 'M' : 'F';
+    editor.setGender(next);
+    btnGender.textContent = next;
+});
+btnUndo.addEventListener('click', () => editor.undo());
+btnReset.addEventListener('click', () => editor.resetPose());
+
+// ComfyUI mode
+if (mode === 'comfyui') {
+    const bridge = new ComfyuiBridge(editor, renderer);
+    document.getElementById('btn-save').style.display = '';
+    document.getElementById('btn-save').addEventListener('click', async () => {
+        status.textContent = 'Capturing...';
+        window.parent.postMessage({ cmd: 'mannequin', type: 'event', method: 'UserSaved' }, window.location.origin);
+    });
+}
+
+// Standalone mode
+if (mode === 'standalone') {
+    document.getElementById('btn-dl-pose').style.display  = '';
+    document.getElementById('btn-dl-depth').style.display = '';
+
+    function download(dataUrl, name) {
+        const a = document.createElement('a');
+        a.href = dataUrl; a.download = name; a.click();
+    }
+    document.getElementById('btn-dl-pose').addEventListener('click', async () => {
+        const { pose } = await renderer.captureImages();
+        download(pose, 'pose.png');
+    });
+    document.getElementById('btn-dl-depth').addEventListener('click', async () => {
+        const { depth } = await renderer.captureImages();
+        download(depth, 'depth.png');
+    });
+}
+
+status.textContent = 'Ready';
+
+// Render loop — only renders when dirty
+function loop() {
+    requestAnimationFrame(loop);
+    editor.update(); // orbit damping
+    if (renderer._dirty) {
+        const wrap = document.getElementById('canvas-wrap');
+        renderer.render(wrap.clientWidth, wrap.clientHeight);
+    }
+}
+loop();
+</script>
+</body>
+</html>

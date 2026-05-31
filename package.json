@@ -1,0 +1,11 @@
+{
+  "name": "comfyui-anime-mannequin",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0"
+  }
+}
