@@ -132,21 +132,23 @@ export class MannequinEditor {
         this._mouse.y = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
 
         this._raycaster.setFromCamera(this._mouse, this._renderer.camera);
-        // Raycast against all joint spheres
-        const joints = [];
+        // Raycast against joint spheres (hit targets) AND body segment meshes.
+        // This lets the user click anywhere on a limb, not just the small pivot dot.
+        const pickables = [];
         this._renderer.scene.traverse(obj => {
-            if (obj.userData.isJoint) joints.push(obj);
+            if (obj.userData.isJoint || (obj.isMesh && obj.userData.boneName && !obj.userData.isJoint))
+                pickables.push(obj);
         });
-        const hits = this._raycaster.intersectObjects(joints, false);
+        const hits = this._raycaster.intersectObjects(pickables, false);
 
         if (hits.length > 0) {
             const hit = hits[0].object;
             const boneName = hit.userData.boneName;
-            // If the hit was on an invisible hit-target sphere, route to the visible sibling
-            let sphere = hit;
-            if (hit.userData.isHitTarget && hit.parent) {
-                const vis = hit.parent.children.find(c => c.userData.isJoint && !c.userData.isHitTarget);
-                if (vis) sphere = vis;
+            // Resolve the visible joint sphere for visual highlight
+            let sphere = null;
+            const boneGroup = hit.userData.isJoint ? hit.parent : hit.parent;
+            if (boneGroup) {
+                sphere = boneGroup.children.find(c => c.userData.isJoint && !c.userData.isHitTarget) ?? null;
             }
             this._selectBone(boneName, sphere);
         } else {
@@ -158,8 +160,8 @@ export class MannequinEditor {
     _selectBone(boneName, sphereMesh) {
         this._deselect();
         this._selectedBone   = boneName;
-        this._selectedSphere = sphereMesh;
-        sphereMesh.material.color.setHex(SELECT_COLOR);
+        this._selectedSphere = sphereMesh ?? null;
+        if (sphereMesh) sphereMesh.material.color.setHex(SELECT_COLOR);
 
         const boneObj = this._renderer.bones.get(boneName);
         if (boneObj) this._transform.attach(boneObj);
