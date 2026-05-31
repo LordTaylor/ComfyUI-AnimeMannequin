@@ -168,3 +168,34 @@ export class SetJointColorModeCommand extends Command {
     undo(store)    { store.setState({ jointColorMode: this._prev }); }
     get description() { return `Joint color mode: ${this._next}`; }
 }
+
+/**
+ * Zmiana background image (dataUrl, opacity, zoom).
+ * Undo obrazu "load" → przywraca poprzedni obraz (lub null).
+ */
+export class SetBgImageCommand extends Command {
+    constructor(prev, next) {
+        super();
+        this._prev = { ...prev };
+        this._next = { ...next };
+    }
+
+    execute(store) { store.setBgImage(this._next); }
+    undo(store)    { store.setBgImage(this._prev); }
+    get description() { return 'Set background image'; }
+}
+
+/**
+ * Zmiana stylu ramki kadrowania (color, opacity).
+ */
+export class SetCropFrameCfgCommand extends Command {
+    constructor(prev, next) {
+        super();
+        this._prev = { ...prev };
+        this._next = { ...next };
+    }
+
+    execute(store) { store.setCropFrame(this._next); }
+    undo(store)    { store.setCropFrame(this._prev); }
+    get description() { return 'Set crop frame style'; }
+}

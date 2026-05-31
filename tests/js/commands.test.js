@@ -18,6 +18,7 @@ const {
     RotateBoneCommand, SetProportionsCommand, SetBustCfgCommand,
     SetGenderCommand, ResetPoseCommand, MirrorPoseCommand,
     RandomPoseCommand, SetJointColorModeCommand,
+    SetBgImageCommand, SetCropFrameCfgCommand,
 } = await import('../../static/src/commands.js');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -214,5 +215,60 @@ describe('SetJointColorModeCommand', () => {
         expect(s.getState().jointColorMode).toBe('flat');
         cmd.undo(s);
         expect(s.getState().jointColorMode).toBe('openpose');
+    });
+});
+
+// ── SetBgImageCommand ─────────────────────────────────────────────────────────
+
+describe('SetBgImageCommand', () => {
+    it('execute sets dataUrl and opacity', () => {
+        const s = mkStore();
+        const prev = s.getState().bgImage;
+        const next = { ...prev, dataUrl: 'data:image/png;base64,abc', opacity: 0.3 };
+        new SetBgImageCommand(prev, next).execute(s);
+        expect(s.getState().bgImage.dataUrl).toBe('data:image/png;base64,abc');
+        expect(s.getState().bgImage.opacity).toBe(0.3);
+    });
+
+    it('undo restores previous state', () => {
+        const s = mkStore();
+        const prev = s.getState().bgImage;
+        const next = { ...prev, dataUrl: 'data:image/png;base64,abc' };
+        const cmd = new SetBgImageCommand(prev, next);
+        cmd.execute(s);
+        cmd.undo(s);
+        expect(s.getState().bgImage.dataUrl).toBe(null);
+    });
+
+    it('undo of remove restores dataUrl', () => {
+        const s = mkStore();
+        s.setBgImage({ dataUrl: 'data:image/png;base64,xyz' });
+        const prev = s.getState().bgImage;
+        const cmd = new SetBgImageCommand(prev, { ...prev, dataUrl: null });
+        cmd.execute(s);
+        expect(s.getState().bgImage.dataUrl).toBeNull();
+        cmd.undo(s);
+        expect(s.getState().bgImage.dataUrl).toBe('data:image/png;base64,xyz');
+    });
+});
+
+// ── SetCropFrameCfgCommand ────────────────────────────────────────────────────
+
+describe('SetCropFrameCfgCommand', () => {
+    it('execute sets color and opacity', () => {
+        const s = mkStore();
+        const prev = s.getState().cropFrame;
+        const next = { ...prev, color: '#ff0000', opacity: 0.8 };
+        new SetCropFrameCfgCommand(prev, next).execute(s);
+        expect(s.getState().cropFrame.color).toBe('#ff0000');
+        expect(s.getState().cropFrame.opacity).toBe(0.8);
+    });
+
+    it('undo restores previous crop frame', () => {
+        const s = mkStore();
+        const prev = s.getState().cropFrame;
+        const cmd = new SetCropFrameCfgCommand(prev, { ...prev, color: '#ff0000' });
+        cmd.execute(s); cmd.undo(s);
+        expect(s.getState().cropFrame.color).toBe('#ffffff');
     });
 });
