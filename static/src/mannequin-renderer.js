@@ -492,7 +492,7 @@ export class MannequinRenderer {
         // WebGL ignores linewidth > 1 on all major platforms.
         // Use CylinderMesh per limb — thick colored tubes that look like classic OpenPose sticks.
         // SKELETON_CYLINDER_RADIUS controls visual thickness in scene units (character ~2m tall).
-        const RADIUS = 0.022; // ~2.2cm on a 2m character — clearly visible, not too chunky
+        const RADIUS = 0.015; // ~1.5cm on a 2m character (−30% from original 0.022)
 
         const group = new THREE.Group();
         group.renderOrder = 3;
