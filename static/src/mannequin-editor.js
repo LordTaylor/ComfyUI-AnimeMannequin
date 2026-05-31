@@ -105,7 +105,14 @@ export class MannequinEditor {
             const dstBone = this._renderer.bones.get(dst);
             if (!srcBone || !dstBone) continue;
             const q = srcBone.quaternion;
-            dstBone.quaternion.set(-q.x, q.y, q.z, q.w);
+            // L→R: negate qx (left-bone local frame convention).
+            // R→L: negate qy+qz instead — right-bone local frames share orientation with left,
+            //       so the mirror is the conjugate of the L→R formula.
+            if (direction === 'L_to_R') {
+                dstBone.quaternion.set(-q.x,  q.y,  q.z, q.w);
+            } else {
+                dstBone.quaternion.set( q.x, -q.y, -q.z, q.w);
+            }
         }
         this._saveUndoSnapshot();
         this._renderer.markDirty();

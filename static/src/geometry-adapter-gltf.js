@@ -315,10 +315,15 @@ export async function buildSegments(gender) {
                 extraSeg.userData._baseScale    = { x: extraSeg.scale.x, y: extraSeg.scale.y, z: extraSeg.scale.z };
                 extraSeg.userData._basePosition = { x: relPos.x, y: relPos.y, z: relPos.z };
                 if (extraPG === 'bust') {
-                    // Compute real half-height in bone-group space so hinge math uses actual mesh bounds.
+                    // Half-height of bust mesh in parent bone-group space.
+                    // Projects world-up (0,1,0) into geometry local space so the result is correct
+                    // even when extraWorldQ has a non-trivial rotation (e.g. Blender export tilt).
                     geom.computeBoundingBox();
-                    const bbox = geom.boundingBox;
-                    extraSeg.userData._bustHalfH = ((bbox.max.y - bbox.min.y) / 2) * extraWorldS.y * charScale;
+                    const ext = new THREE.Vector3();
+                    geom.boundingBox.getSize(ext);
+                    const localUp = new THREE.Vector3(0, 1, 0).applyQuaternion(extraWorldQ.clone().invert());
+                    const geoHeight = Math.abs(localUp.x) * ext.x + Math.abs(localUp.y) * ext.y + Math.abs(localUp.z) * ext.z;
+                    extraSeg.userData._bustHalfH = (geoHeight / 2) * extraWorldS.y * charScale;
                 }
                 group.add(extraSeg);
             }

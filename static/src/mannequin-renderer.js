@@ -2,6 +2,10 @@ import * as THREE from '../lib/three.module.js';
 import { BONE_NAMES, BONE_CHILDREN, defaultScene, jsonToScene, defaultProportions } from './mannequin-model.js';
 import { buildSegments, computeBoneOffsets, WORLD_HEIGHT, OPENPOSE_COLORS, JOINT_COLOR } from './geometry-adapter-gltf.js';
 
+// How much the bust projects forward per unit of scale increase.
+// 0 = grows only downward; increase for more forward projection.
+const BUST_FWD_PROJECTION = 0.35;
+
 function sobelCanny(sourceCanvas) {
     const W = sourceCanvas.width;
     const H = sourceCanvas.height;
@@ -190,11 +194,10 @@ export class MannequinRenderer {
                 // halfH from actual geometry bounding box (set in adapter), fallback to 0.
                 // new_top = bp.y + halfH = constant → new_center_y = bp.y - halfH*(s-1)
                 const halfH = obj.userData._bustHalfH ?? 0;
-                const fwdBase = Math.abs(bp.z);
                 obj.position.set(
-                    bp.x,                                    // lateral: pivot stays centred
-                    bp.y - halfH * (s - 1),                  // top fixed, bottom sags
-                    bp.z + fwdBase * 0.35 * (s - 1)         // forward projection grows with size
+                    bp.x,
+                    bp.y - halfH * (s - 1),                                         // top fixed, bottom sags
+                    bp.z + Math.abs(bp.z) * BUST_FWD_PROJECTION * (s - 1)          // forward projection
                 );
             } else {
                 // All other extra nodes (ears, eyes, nose): scale offset proportionally
