@@ -1,5 +1,5 @@
 import * as THREE from '../lib/three.module.js';
-import { BONE_NAMES, BONE_CHILDREN, defaultScene, jsonToScene } from './mannequin-model.js';
+import { BONE_NAMES, BONE_CHILDREN, defaultScene, jsonToScene, defaultProportions } from './mannequin-model.js';
 import { buildSegments, computeBoneOffsets, WORLD_HEIGHT, OPENPOSE_COLORS, JOINT_COLOR } from './geometry-adapter-gltf.js';
 
 function sobelCanny(sourceCanvas) {
@@ -81,6 +81,7 @@ export class MannequinRenderer {
 
         this._dirty = true;
         this._jointColorMode = 'openpose'; // 'openpose' | 'flat'
+        this._proportions = defaultProportions();
     }
 
     get camera() { return this._camera; }
@@ -89,6 +90,7 @@ export class MannequinRenderer {
     get mannequinRoot() { return this._mannequinRoot; }
     get outputWidth()  { return this._outputWidth; }
     get outputHeight() { return this._outputHeight; }
+    get proportions() { return { ...this._proportions }; }
 
     setOutputSize(w, h) {
         this._outputWidth  = w;
@@ -139,12 +141,33 @@ export class MannequinRenderer {
         // Apply joint color mode after build
         this._applyJointColors(this._jointColorMode);
 
+        // Apply proportions (from sceneData or current stored proportions)
+        this.applyProportions(sceneData?.proportions ?? {});
+
         this._dirty = true;
     }
 
     setJointColorMode(mode) {
         this._jointColorMode = mode;
         this._applyJointColors(mode);
+        this._dirty = true;
+    }
+
+    applyProportions(proportions) {
+        this._proportions = { ...this._proportions, ...proportions };
+        const { head = 1, bust = 1, hips = 1, waist = 1, legs = 1, arms = 1 } = this._proportions;
+
+        // Map proportion name → uniform scale multiplier
+        const scaleFor = { head, bust, hips, waist, legs, arms };
+
+        this._scene.traverse(obj => {
+            if (!obj.isMesh || !obj.userData._baseScale || obj.userData.isJoint || obj.userData.isHitTarget) return;
+            const pg = obj.userData.proportionGroup;
+            const bs = obj.userData._baseScale;
+            const s = pg ? (scaleFor[pg] ?? 1) : 1;
+            obj.scale.set(bs.x * s, bs.y * s, bs.z * s);
+        });
+
         this._dirty = true;
     }
 
@@ -188,6 +211,9 @@ export class MannequinRenderer {
         if (sceneData.camera) {
             this._applyCameraFromScene(sceneData.camera);
         }
+        if (sceneData.proportions) {
+            this.applyProportions(sceneData.proportions);
+        }
         this._dirty = true;
     }
 
@@ -214,6 +240,7 @@ export class MannequinRenderer {
             gender: this._gender,
             bones,
             camera: { azimuth: cameraAzimuth, elevation: cameraElevation, distance: 2.5 },
+            proportions: { ...this._proportions },
         };
     }
 
