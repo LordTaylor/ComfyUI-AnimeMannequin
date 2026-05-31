@@ -135,7 +135,6 @@ function openMannequinModal(node) {
         if (d?.cmd !== "mannequin" || d?.method !== "UserSaved") return;
         if (closing) return;
         closing = true;
-        cleanup();
 
         try {
             setStatus("Capturing...", "#FFA500");
@@ -164,10 +163,13 @@ function openMannequinModal(node) {
 
             app.graph.setDirtyCanvas(true, true);
             setStatus("Saved to node", "#4CAF50");
+            // Remove listener only on success — keeps it alive for retry on error
+            cleanup();
             setTimeout(() => overlay.remove(), 600);
         } catch (err) {
             console.error("[AnimeMannequin] save error:", err);
-            setStatus(`Error: ${err.message}`, "#f44");
+            setStatus(`Error: ${err.message} — click Close & Save to retry`, "#f44");
+            // Do NOT call cleanup() here — leave listener registered so user can retry
             closing = false;
         }
     }
