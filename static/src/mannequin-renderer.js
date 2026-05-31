@@ -2,9 +2,11 @@ import * as THREE from '../lib/three.module.js';
 import { BONE_NAMES, BONE_CHILDREN, defaultScene, jsonToScene, defaultProportions } from './mannequin-model.js';
 import { buildSegments, computeBoneOffsets, WORLD_HEIGHT, OPENPOSE_COLORS, JOINT_COLOR } from './geometry-adapter-gltf.js';
 
-// How much the bust projects forward per unit of scale increase.
-// 0 = grows only downward; increase for more forward projection.
-const BUST_FWD_PROJECTION = 0.35;
+// Anime-style bust projection: ratio of forward movement to downward sag.
+// >1 = more forward than down (perky/anime). Applied to halfH*(s-1) growth.
+const BUST_FWD_PROJECTION = 1.5;
+// How much of the hinge sag survives in anime mode (0 = no sag, 1 = full hinge).
+const BUST_SAG_FACTOR = 0.35;
 
 // COCO-style limb connections shared by both the 3D skeleton overlay and the openpose capture.
 // Each entry: [boneA, boneB, rgbHex]
@@ -223,14 +225,20 @@ export class MannequinRenderer {
             obj.scale.set(bs.x * s, bs.y * s, bs.z * s);
             if (!bp) return;
             if (pg === 'bust') {
-                // Hinge model: top edge of breast stays attached to chest at all sizes.
-                // halfH from actual geometry bounding box (set in adapter), fallback to 0.
-                // new_top = bp.y + halfH = constant → new_center_y = bp.y - halfH*(s-1)
                 const halfH = obj.userData._bustHalfH ?? 0;
+                const growth = halfH * (s - 1);
+
+                // Forward direction: determined by the sign of the breast's Z offset from
+                // its parent bone. bp.z > 0 → character faces +Z; bp.z < 0 → faces -Z.
+                // Using halfH (not abs(bp.z)) as the reference distance so projection is
+                // proportional to breast size regardless of how close the pivot is to the
+                // chest surface. Anime style: forward dominant (FWD_PROJECTION > 1),
+                // minimal downward sag (SAG_FACTOR < 1).
+                const fwdSign = Math.abs(bp.z) > 0.001 ? Math.sign(bp.z) : -1;
                 obj.position.set(
                     bp.x,
-                    bp.y - halfH * (s - 1),                                         // top fixed, bottom sags
-                    bp.z + Math.abs(bp.z) * BUST_FWD_PROJECTION * (s - 1)          // forward projection
+                    bp.y - growth * BUST_SAG_FACTOR,                   // mild sag (anime: ~35%)
+                    bp.z + fwdSign * growth * BUST_FWD_PROJECTION       // strong forward projection
                 );
             } else {
                 // All other extra nodes (ears, eyes, nose): scale offset proportionally
@@ -349,9 +357,15 @@ export class MannequinRenderer {
         this._fitDepthCamera(W, H);
         this._depthTarget.setSize(W, H);
 
+        // scene.background (grey) is rendered before geometry even with overrideMaterial —
+        // setting it to null ensures background pixels come out as clear-color (black = 0),
+        // so our background-detection check `v === 0` works correctly.
+        const savedBackground = this._scene.background;
         const buf = new Uint8Array(W * H * 4);
         try {
+            this._scene.background    = null;
             this._scene.overrideMaterial = this._depthMat;
+            this._renderer.setClearColor(0x000000, 1);
             this._renderer.setSize(W, H);
             this._renderer.setRenderTarget(this._depthTarget);
             this._renderer.render(this._scene, this._depthCamera);
@@ -359,6 +373,7 @@ export class MannequinRenderer {
         } finally {
             this._renderer.setRenderTarget(null);
             this._scene.overrideMaterial = null;
+            this._scene.background = savedBackground;
         }
         setJointsVisible(true);
 
