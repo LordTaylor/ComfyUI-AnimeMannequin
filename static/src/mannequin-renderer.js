@@ -1,6 +1,6 @@
 import * as THREE from '../lib/three.module.js';
 import { BONE_NAMES, BONE_CHILDREN, defaultScene, jsonToScene } from './mannequin-model.js';
-import { buildSegments, computeBoneOffsets, WORLD_HEIGHT } from './geometry-adapter-gltf.js';
+import { buildSegments, computeBoneOffsets, WORLD_HEIGHT, OPENPOSE_COLORS, JOINT_COLOR } from './geometry-adapter-gltf.js';
 
 function sobelCanny(sourceCanvas) {
     const W = sourceCanvas.width;
@@ -45,7 +45,7 @@ export class MannequinRenderer {
     constructor(canvas) {
         this._canvas = canvas;
         this._scene = new THREE.Scene();
-        this._scene.background = new THREE.Color(0x1a1a1a);
+        this._scene.background = new THREE.Color(0x4a4a4a);
 
         this._camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100);
         this._outputWidth  = 768;
@@ -75,7 +75,12 @@ export class MannequinRenderer {
         dir.position.set(1, 2, 1);
         this._scene.add(dir);
 
+        // Floor grid — 10×10 cells, 0.2 scene units each (covers 2×2 m around origin)
+        const grid = new THREE.GridHelper(2, 10, 0x888888, 0x555555);
+        this._scene.add(grid);
+
         this._dirty = true;
+        this._jointColorMode = 'openpose'; // 'openpose' | 'flat'
     }
 
     get camera() { return this._camera; }
@@ -131,7 +136,28 @@ export class MannequinRenderer {
         // Restore pose from scene data
         if (sceneData) this.applyScene(sceneData);
 
+        // Apply joint color mode after build
+        this._applyJointColors(this._jointColorMode);
+
         this._dirty = true;
+    }
+
+    setJointColorMode(mode) {
+        this._jointColorMode = mode;
+        this._applyJointColors(mode);
+        this._dirty = true;
+    }
+
+    _applyJointColors(mode) {
+        this._scene.traverse(obj => {
+            if (obj.userData.isJoint && !obj.userData.isHitTarget) {
+                const color = mode === 'openpose'
+                    ? (OPENPOSE_COLORS[obj.userData.boneName] ?? JOINT_COLOR)
+                    : JOINT_COLOR;
+                obj.userData.originalColor = color;
+                obj.material.color.setHex(color);
+            }
+        });
     }
 
     _buildHierarchy(parentName, offsets) {
