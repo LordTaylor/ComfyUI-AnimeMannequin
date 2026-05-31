@@ -4,10 +4,13 @@ import { buildSegments, computeBoneOffsets, WORLD_HEIGHT, OPENPOSE_COLORS, JOINT
 
 export const BUST_DEFAULTS = {
     baseFwd  : 0.00,   // constant forward offset at s=1
-    fwdPush  : 0.65,   // forward push per unit of growth
+    fwdPush  : 0.65,   // forward push per unit of growth (halfH*(s-1))
     droop    : 0.20,   // downward droop per unit of growth
-    latX     : 0.18,   // lateral X spread per unit of growth
-    latY     : 0.30,   // lateral Y spread (world left/right in chest-bone local space)
+    latX     : 0.18,   // local-X spread per unit of growth
+    latY     : 0.30,   // local-Y spread per unit of growth
+    spread   : 0.00,   // world horizontal spread: direct world-units per (s-1)
+                       //   local Y = world left/right in chest-bone space
+                       //   e.g. spread=0.05 → 5cm wider at s=2, 2.5cm at s=1.5
     rotFwd   : 0.60,   // forward tilt (rad) per (s-1)
     rotLat   : -0.50,  // lateral tilt (rad) per (s-1)
     rotY     : 0.50,   // left/right rotation (rad) per (s-1)
@@ -362,9 +365,10 @@ export class MannequinRenderer {
                 const fwdSign  = Math.abs(bp.z) > 0.001 ? Math.sign(bp.z) : -1;
                 const latSign  = Math.abs(bp.x) > 0.001 ? Math.sign(bp.x) : 1;
                 const latSignY = Math.abs(bp.y) > 0.001 ? Math.sign(bp.y) : 1;
+                // spread: direct world-unit offset per (s-1), independent of mesh size
                 obj.position.set(
                     bp.x + latSign  * growth * c.latX,
-                    bp.y + latSignY * growth * c.latY,
+                    bp.y + latSignY * (growth * c.latY + (s - 1) * c.spread),
                     bp.z + fwdSign  * (c.baseFwd + growth * c.fwdPush) - growth * c.droop
                 );
 

@@ -95,6 +95,7 @@ export class BustDebugPanel {
             { key: 'baseFwd',  min: -0.2, max:  0.2,  step: 0.01 },
             { key: 'fwdPush',  min: -2.0, max:  2.0,  step: 0.05 },
             { key: 'droop',    min: -1.0, max:  1.0,  step: 0.05 },
+            { key: 'spread',   min:  0.0, max:  0.3,  step: 0.005 }, // ← world horizontal spread
             { key: 'latX',     min: -1.0, max:  1.0,  step: 0.05 },
             { key: 'latY',     min: -1.0, max:  1.0,  step: 0.05 },
             { key: 'rotFwd',   min: -2.0, max:  2.0,  step: 0.05 },
