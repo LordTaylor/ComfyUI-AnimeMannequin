@@ -126,6 +126,69 @@ describe('setBustCfg', () => {
     });
 });
 
+// ── setBgImage ────────────────────────────────────────────────────────────────
+
+describe('setBgImage', () => {
+    it('patches dataUrl, preserves opacity and zoom', () => {
+        const s = mkStore();
+        s.setBgImage({ dataUrl: 'data:image/png;base64,abc' });
+        const bg = s.getState().bgImage;
+        expect(bg.dataUrl).toBe('data:image/png;base64,abc');
+        expect(bg.opacity).toBe(0.5);
+        expect(bg.zoom).toBe(1.0);
+    });
+
+    it('successive patches accumulate', () => {
+        const s = mkStore();
+        s.setBgImage({ opacity: 0.3 });
+        s.setBgImage({ zoom: 2.0 });
+        const bg = s.getState().bgImage;
+        expect(bg.opacity).toBe(0.3);
+        expect(bg.zoom).toBe(2.0);
+    });
+
+    it('getState returns copy — mutation does not affect store', () => {
+        const s = mkStore();
+        s.setBgImage({ dataUrl: 'x' });
+        const bg = s.getState().bgImage;
+        bg.dataUrl = 'mutated';
+        expect(s.getState().bgImage.dataUrl).toBe('x');
+    });
+
+    it('notifies subscribers once', () => {
+        const s = mkStore(); const spy = vi.fn();
+        s.subscribe(spy);
+        s.setBgImage({ opacity: 0.2 });
+        expect(spy).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ── setCropFrame ──────────────────────────────────────────────────────────────
+
+describe('setCropFrame', () => {
+    it('patches color, preserves opacity', () => {
+        const s = mkStore();
+        s.setCropFrame({ color: '#ff0000' });
+        const cf = s.getState().cropFrame;
+        expect(cf.color).toBe('#ff0000');
+        expect(cf.opacity).toBe(0.55);
+    });
+
+    it('patches opacity, preserves color', () => {
+        const s = mkStore();
+        s.setCropFrame({ opacity: 0.9 });
+        expect(s.getState().cropFrame.opacity).toBe(0.9);
+        expect(s.getState().cropFrame.color).toBe('#ffffff');
+    });
+
+    it('notifies subscribers once', () => {
+        const s = mkStore(); const spy = vi.fn();
+        s.subscribe(spy);
+        s.setCropFrame({ opacity: 0.9 });
+        expect(spy).toHaveBeenCalledTimes(1);
+    });
+});
+
 // ── setOutputSize ─────────────────────────────────────────────────────────────
 
 describe('setOutputSize', () => {

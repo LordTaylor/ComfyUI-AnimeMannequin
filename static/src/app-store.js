@@ -25,6 +25,8 @@ export function defaultState(gender = 'F') {
         groundEnabled:  false,
         outputWidth:    768,
         outputHeight:   1024,
+        bgImage:   { dataUrl: null, opacity: 0.5, zoom: 1.0 },
+        cropFrame: { color: '#ffffff', opacity: 0.55 },
     };
 }
 
@@ -46,6 +48,8 @@ export class AppStore {
             pose,
             proportions: { ...this._state.proportions },
             bustCfg:     { ...this._state.bustCfg },
+            bgImage:     { ...this._state.bgImage },
+            cropFrame:   { ...this._state.cropFrame },
         };
     }
 
@@ -91,6 +95,18 @@ export class AppStore {
     /** Ustaw rozmiar wyjściowy. */
     setOutputSize(w, h) {
         this._state = { ...this._state, outputWidth: w, outputHeight: h };
+        this._notify();
+    }
+
+    /** Patch background image config — niezmienione pola zostają. */
+    setBgImage(partial) {
+        this._state = { ...this._state, bgImage: { ...this._state.bgImage, ...partial } };
+        this._notify();
+    }
+
+    /** Patch crop frame style — niezmienione pola zostają. */
+    setCropFrame(partial) {
+        this._state = { ...this._state, cropFrame: { ...this._state.cropFrame, ...partial } };
         this._notify();
     }
 
