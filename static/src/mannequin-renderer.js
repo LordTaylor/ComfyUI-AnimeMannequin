@@ -75,9 +75,19 @@ export class MannequinRenderer {
         dir.position.set(1, 2, 1);
         this._scene.add(dir);
 
-        // Floor grid — 10×10 cells, 0.2 scene units each (covers 2×2 m around origin)
-        const grid = new THREE.GridHelper(2, 10, 0x888888, 0x555555);
-        this._scene.add(grid);
+        // Floor grid — viewport only, hidden during captures
+        this._grid = new THREE.GridHelper(2, 10, 0x888888, 0x555555);
+        this._scene.add(this._grid);
+
+        // Optional ground plane — shown in captures only when user enables it
+        const groundGeo = new THREE.PlaneGeometry(3, 3);
+        const groundMat = new THREE.MeshBasicMaterial({ color: 0x2a2a2a, side: THREE.DoubleSide });
+        this._ground = new THREE.Mesh(groundGeo, groundMat);
+        this._ground.rotation.x = -Math.PI / 2;
+        this._ground.position.y = 0.001; // avoid z-fighting with grid
+        this._ground.visible = false;
+        this._scene.add(this._ground);
+        this._groundEnabled = false;
 
         this._dirty = true;
         this._jointColorMode = 'openpose'; // 'openpose' | 'flat'
@@ -91,6 +101,13 @@ export class MannequinRenderer {
     get outputWidth()  { return this._outputWidth; }
     get outputHeight() { return this._outputHeight; }
     get proportions() { return { ...this._proportions }; }
+    get groundEnabled() { return this._groundEnabled; }
+
+    setGroundVisible(enabled) {
+        this._groundEnabled = enabled;
+        this._ground.visible = enabled;
+        this._dirty = true;
+    }
 
     setOutputSize(w, h) {
         this._outputWidth  = w;
@@ -256,6 +273,9 @@ export class MannequinRenderer {
         const W = this._outputWidth;
         const H = this._outputHeight;
 
+        // Grid never appears in captures — hide it, restore after
+        this._grid.visible = false;
+
         // --- POSE render ---
         this._renderer.setSize(W, H);
         this._camera.aspect = W / H;
@@ -309,6 +329,8 @@ export class MannequinRenderer {
         // Camera is already set up for W×H from the pose render above.
         const openposeDataUrl = this._captureOpenPose(W, H);
 
+        // Restore grid for viewport
+        this._grid.visible = true;
         this._dirty = true;
         return { pose: poseDataUrl, depth: depthDataUrl, canny: cannyDataUrl, openpose: openposeDataUrl };
     }

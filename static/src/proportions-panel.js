@@ -45,25 +45,26 @@ export class ProportionsPanel {
     mount(container) {
         this._panel = document.createElement('div');
         this._panel.style.cssText = [
-            'position:fixed', 'right:0', 'top:0', 'bottom:0', 'width:200px',
+            'position:fixed', 'right:0', 'top:0', 'bottom:0', 'width:210px',
             'background:#222', 'border-left:1px solid #444', 'z-index:101',
             'display:none', 'flex-direction:column', 'overflow:hidden',
         ].join(';');
 
         // Header
         const header = document.createElement('div');
-        header.style.cssText = 'padding:8px;border-bottom:1px solid #444;flex-shrink:0;display:flex;align-items:center;';
+        header.style.cssText = 'padding:8px 10px;border-bottom:1px solid #444;flex-shrink:0;display:flex;align-items:center;gap:6px;';
         const title = document.createElement('span');
-        title.textContent = 'Proportions';
+        title.textContent = 'Model Control';
         title.style.cssText = 'color:#fff;font-size:12px;font-weight:bold;flex:1;';
-        const closeBtn = document.createElement('button');
-        closeBtn.textContent = '×';
-        closeBtn.style.cssText = 'background:none;border:none;color:#aaa;cursor:pointer;font-size:18px;padding:0 2px;';
-        closeBtn.onclick = () => this.toggle();
         const resetBtn = document.createElement('button');
         resetBtn.textContent = 'Reset';
-        resetBtn.style.cssText = 'background:#333;color:#aaa;border:none;border-radius:3px;cursor:pointer;font-size:10px;padding:3px 6px;margin-right:6px;';
+        resetBtn.title = 'Reset all proportions to default';
+        resetBtn.style.cssText = 'background:#333;color:#aaa;border:none;border-radius:3px;cursor:pointer;font-size:10px;padding:3px 7px;';
         resetBtn.onclick = () => this.setProportions(defaultProportions());
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = '×';
+        closeBtn.style.cssText = 'background:none;border:none;color:#888;cursor:pointer;font-size:16px;padding:0 2px;line-height:1;';
+        closeBtn.onclick = () => this.toggle();
         header.appendChild(title);
         header.appendChild(resetBtn);
         header.appendChild(closeBtn);
@@ -71,15 +72,15 @@ export class ProportionsPanel {
 
         // Sliders
         const body = document.createElement('div');
-        body.style.cssText = 'flex:1;overflow-y:auto;padding:8px;';
+        body.style.cssText = 'flex:1;overflow-y:auto;padding:10px;';
 
         for (const { key, label, min, max, step, femaleOnly } of SLIDERS) {
             const row = document.createElement('div');
-            row.style.cssText = 'margin-bottom:10px;';
+            row.style.cssText = 'margin-bottom:12px;';
             if (femaleOnly) row.dataset.femaleOnly = '1';
 
             const labelRow = document.createElement('div');
-            labelRow.style.cssText = 'display:flex;justify-content:space-between;margin-bottom:3px;';
+            labelRow.style.cssText = 'display:flex;justify-content:space-between;margin-bottom:4px;';
             const labelEl = document.createElement('span');
             labelEl.textContent = label;
             labelEl.style.cssText = 'color:#ccc;font-size:11px;';
@@ -108,6 +109,32 @@ export class ProportionsPanel {
             body.appendChild(row);
             this._sliderEls[key] = { slider, valueEl, row };
         }
+
+        // Separator
+        const sep = document.createElement('div');
+        sep.style.cssText = 'border-top:1px solid #444;margin:8px 0;';
+        body.appendChild(sep);
+
+        // Ground plane toggle
+        const groundRow = document.createElement('div');
+        groundRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;';
+        const groundLabel = document.createElement('span');
+        groundLabel.textContent = 'Ground plane';
+        groundLabel.title = 'Show solid ground in exported images';
+        groundLabel.style.cssText = 'color:#ccc;font-size:11px;';
+        const groundBtn = document.createElement('button');
+        groundBtn.textContent = 'OFF';
+        groundBtn.style.cssText = 'background:#333;color:#888;border:none;border-radius:3px;cursor:pointer;font-size:10px;padding:3px 8px;';
+        groundBtn.addEventListener('click', () => {
+            const next = !this._renderer.groundEnabled;
+            this._renderer.setGroundVisible(next);
+            groundBtn.textContent = next ? 'ON' : 'OFF';
+            groundBtn.style.background = next ? '#1b5e20' : '#333';
+            groundBtn.style.color      = next ? '#8f8'   : '#888';
+        });
+        groundRow.appendChild(groundLabel);
+        groundRow.appendChild(groundBtn);
+        body.appendChild(groundRow);
 
         this._panel.appendChild(body);
         container.appendChild(this._panel);
