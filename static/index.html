@@ -12,7 +12,7 @@ body { background: #1a1a1a; color: #eee; font-family: sans-serif; display: flex;
 button { padding: 5px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; white-space: nowrap; }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 #btn-gender { background: #1565c0; color: #fff; min-width: 36px; }
-#btn-undo, #btn-reset { background: #333; color: #aaa; }
+#btn-undo, #btn-redo, #btn-reset { background: #333; color: #aaa; }
 #btn-mirror-lr, #btn-mirror-rl { background: #333; color: #aaa; }
 #btn-poses { background: #333; color: #aaa; }
 #btn-random { background: #6a1b9a; color: #fff; }
@@ -92,6 +92,7 @@ canvas { display: block; width: 100%; height: 100%; }
   <button id="btn-gender" title="Toggle gender (F / M)">F</button>
   <div class="toolbar-sep"></div>
   <button id="btn-undo"      title="Undo last rotation (Ctrl+Z)">Undo</button>
+  <button id="btn-redo"      title="Redo (Ctrl+Shift+Z)">Redo</button>
   <button id="btn-reset"     title="Reset all bones to default pose">Reset</button>
   <button id="btn-mirror-lr" title="Copy left side → right side">L→R</button>
   <button id="btn-mirror-rl" title="Copy right side → left side">R→L</button>
@@ -203,6 +204,7 @@ btnGender.addEventListener('click', async () => {
 });
 
 document.getElementById('btn-undo').addEventListener('click', () => editor.undo());
+document.getElementById('btn-redo').addEventListener('click', () => editor.redo());
 document.getElementById('btn-reset').addEventListener('click', () => editor.resetPose());
 document.getElementById('btn-mirror-lr').addEventListener('click', () => editor.mirrorPose('L_to_R'));
 document.getElementById('btn-mirror-rl').addEventListener('click', () => editor.mirrorPose('R_to_L'));
