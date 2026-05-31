@@ -184,9 +184,22 @@ export class MannequinRenderer {
             const bp = obj.userData._basePosition;
             const s = pg ? (scaleFor[pg] ?? 1) : 1;
             obj.scale.set(bs.x * s, bs.y * s, bs.z * s);
-            // Translate extra nodes (ears, eyes, breasts…) proportionally with the group scale.
-            // Main bone meshes are at (0,0,0) so this is a no-op for them.
-            if (bp) obj.position.set(bp.x * s, bp.y * s, bp.z * s);
+            if (!bp) return;
+            if (pg === 'bust') {
+                // Hinge model: top edge of breast stays attached to chest at all sizes.
+                // halfH ≈ 65% of forward depth (empirical for stylised female GLB).
+                // new_top = new_center_y + halfH*s  must equal  bp.y + halfH  →
+                //   new_center_y = bp.y - halfH*(s-1)
+                const halfH = Math.abs(bp.z) * 0.65;
+                obj.position.set(
+                    bp.x,                                       // lateral: pivot stays put, mesh widens from centre
+                    bp.y - halfH * (s - 1),                    // top fixed, bottom sags
+                    bp.z + Math.abs(bp.z) * 0.25 * (s - 1)    // forward projection grows with size
+                );
+            } else {
+                // All other extra nodes (ears, eyes, nose): scale offset proportionally
+                obj.position.set(bp.x * s, bp.y * s, bp.z * s);
+            }
         });
 
         this._dirty = true;
