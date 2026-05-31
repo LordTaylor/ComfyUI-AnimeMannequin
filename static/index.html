@@ -277,6 +277,12 @@ if (mode === 'standalone') {
 }
 
 // ── Crop frame ────────────────────────────────────────────────────────────────
+// Padding around the crop frame relative to canvas size.
+// More at the bottom so characters have breathing room above the lower edge.
+const CROP_PAD_TOP    = 0.04;
+const CROP_PAD_BOTTOM = 0.09;   // bigger — floor room
+const CROP_PAD_SIDE   = 0.04;
+
 const cropFrame = document.getElementById('crop-frame');
 function updateCropFrame() {
     const wrap = document.getElementById('canvas-wrap');
@@ -284,22 +290,24 @@ function updateCropFrame() {
     const oW = renderer.outputWidth, oH = renderer.outputHeight;
     if (!cW || !cH || !oW || !oH) { cropFrame.style.display = 'none'; return; }
 
-    const canvasAR = cW / cH;
-    const outputAR = oW / oH;
+    // Safe area — canvas minus padding
+    const safeW  = cW * (1 - 2 * CROP_PAD_SIDE);
+    const safeH  = cH * (1 - CROP_PAD_TOP - CROP_PAD_BOTTOM);
+    const safeX0 = cW * CROP_PAD_SIDE;
+    const safeY0 = cH * CROP_PAD_TOP;
 
+    // Fit output aspect ratio inside safe area
+    const safeAR   = safeW / safeH;
+    const outputAR = oW / oH;
     let fW, fH;
-    if (outputAR < canvasAR) {
-        // Portrait output in landscape canvas — pillarbox
-        fH = cH;
-        fW = cH * outputAR;
+    if (outputAR < safeAR) {
+        fH = safeH; fW = safeH * outputAR;   // pillarbox inside safe area
     } else {
-        // Landscape or exact — letterbox
-        fW = cW;
-        fH = cW / outputAR;
+        fW = safeW; fH = safeW / outputAR;   // letterbox inside safe area
     }
 
-    const fX = Math.round((cW - fW) / 2);
-    const fY = Math.round((cH - fH) / 2);
+    const fX = Math.round(safeX0 + (safeW - fW) / 2);
+    const fY = Math.round(safeY0 + (safeH - fH) / 2);
 
     cropFrame.style.display = 'block';
     cropFrame.style.left   = fX + 'px';

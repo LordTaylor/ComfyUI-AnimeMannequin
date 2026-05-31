@@ -2,11 +2,12 @@ import * as THREE from '../lib/three.module.js';
 import { BONE_NAMES, BONE_CHILDREN, defaultScene, jsonToScene, defaultProportions } from './mannequin-model.js';
 import { buildSegments, computeBoneOffsets, WORLD_HEIGHT, OPENPOSE_COLORS, JOINT_COLOR } from './geometry-adapter-gltf.js';
 
-// Anime-style bust projection: ratio of forward movement to downward sag.
-// >1 = more forward than down (perky/anime). Applied to halfH*(s-1) growth.
-const BUST_FWD_PROJECTION = 1.5;
-// How much of the hinge sag survives in anime mode (0 = no sag, 1 = full hinge).
-const BUST_SAG_FACTOR = 0.35;
+// Forward projection of the bust center as a fraction of growth (halfH*(s-1)).
+// Must stay well below 1.0 to avoid "floating ball" effect at high scale values.
+const BUST_FWD_PROJECTION = 0.7;
+// Hinge sag fraction (1.0 = full hinge, top edge stays perfectly fixed).
+// Reducing this below 1.0 causes the top to drift upward — 0.9 gives <10% drift at s=2.
+const BUST_SAG_FACTOR = 0.9;
 
 // COCO-style limb connections shared by both the 3D skeleton overlay and the openpose capture.
 // Each entry: [boneA, boneB, rgbHex]
@@ -228,17 +229,21 @@ export class MannequinRenderer {
                 const halfH = obj.userData._bustHalfH ?? 0;
                 const growth = halfH * (s - 1);
 
-                // Forward direction: determined by the sign of the breast's Z offset from
-                // its parent bone. bp.z > 0 → character faces +Z; bp.z < 0 → faces -Z.
-                // Using halfH (not abs(bp.z)) as the reference distance so projection is
-                // proportional to breast size regardless of how close the pivot is to the
-                // chest surface. Anime style: forward dominant (FWD_PROJECTION > 1),
-                // minimal downward sag (SAG_FACTOR < 1).
+                // Non-uniform scale: narrower in X (avoids sphere at high values),
+                // standard height in Y, slightly more forward depth in Z (teardrop shape).
+                // Exponents per VRoid-style anime breast shaping.
+                obj.scale.set(
+                    bs.x * Math.pow(s, 0.72),   // narrower — less sphere-like
+                    bs.y * s,                    // standard height
+                    bs.z * Math.pow(s, 1.12)    // slightly more depth (forward projection)
+                );
+
+                // Position hinge: forward along the breast's Z-offset direction, mild sag.
                 const fwdSign = Math.abs(bp.z) > 0.001 ? Math.sign(bp.z) : -1;
                 obj.position.set(
                     bp.x,
-                    bp.y - growth * BUST_SAG_FACTOR,                   // mild sag (anime: ~35%)
-                    bp.z + fwdSign * growth * BUST_FWD_PROJECTION       // strong forward projection
+                    bp.y - growth * BUST_SAG_FACTOR,
+                    bp.z + fwdSign * growth * BUST_FWD_PROJECTION
                 );
             } else {
                 // All other extra nodes (ears, eyes, nose): scale offset proportionally
