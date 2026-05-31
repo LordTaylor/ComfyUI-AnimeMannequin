@@ -111,6 +111,7 @@ export async function buildSegments(gender) {
             const glbNode = nodeMap.get(glbNodeName);
             if (glbNode && glbNode.isMesh) {
                 const seg = glbNode.clone();
+                seg.geometry = glbNode.geometry.clone(); // deep clone — prevent shared dispose
                 seg.material = makeToonMat(SEGMENT_COLOR);
                 seg.userData.boneName = boneName;
                 // Reset local transform — position comes from our bone hierarchy

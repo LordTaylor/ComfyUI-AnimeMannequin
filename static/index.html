@@ -78,9 +78,15 @@ const status    = document.getElementById('status');
 
 btnGender.textContent = gender;
 btnGender.addEventListener('click', async () => {
-    const next = editor.gender === 'F' ? 'M' : 'F';
-    await editor.setGender(next);
-    btnGender.textContent = next;
+    if (btnGender.disabled) return;
+    btnGender.disabled = true;
+    try {
+        const next = editor.gender === 'F' ? 'M' : 'F';
+        await editor.setGender(next);
+        btnGender.textContent = next;
+    } finally {
+        btnGender.disabled = false;
+    }
 });
 btnUndo.addEventListener('click', () => editor.undo());
 btnReset.addEventListener('click', () => editor.resetPose());

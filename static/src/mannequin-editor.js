@@ -1,7 +1,7 @@
 import * as THREE from '../lib/three.module.js';
 import { OrbitControls } from '../lib/OrbitControls.js';
 import { TransformControls } from '../lib/TransformControls.js';
-import { SELECT_COLOR, JOINT_COLOR } from './geometry-adapter-capsule.js';
+import { SELECT_COLOR, JOINT_COLOR } from './geometry-adapter-gltf.js';
 import { defaultScene } from './mannequin-model.js';
 
 const UNDO_LIMIT = 20;
