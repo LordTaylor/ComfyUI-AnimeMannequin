@@ -181,8 +181,12 @@ export class MannequinRenderer {
             if (!obj.isMesh || !obj.userData._baseScale || obj.userData.isJoint || obj.userData.isHitTarget) return;
             const pg = obj.userData.proportionGroup;
             const bs = obj.userData._baseScale;
+            const bp = obj.userData._basePosition;
             const s = pg ? (scaleFor[pg] ?? 1) : 1;
             obj.scale.set(bs.x * s, bs.y * s, bs.z * s);
+            // Translate extra nodes (ears, eyes, breasts…) proportionally with the group scale.
+            // Main bone meshes are at (0,0,0) so this is a no-op for them.
+            if (bp) obj.position.set(bp.x * s, bp.y * s, bp.z * s);
         });
 
         this._dirty = true;
@@ -339,51 +343,76 @@ export class MannequinRenderer {
         const canvas = document.createElement('canvas');
         canvas.width = W; canvas.height = H;
         const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#000000';
+        ctx.fillStyle = '#000';
         ctx.fillRect(0, 0, W, H);
 
-        // Project each bone's world position onto the current camera view
-        const screenPos = new Map();
+        // Project bone world positions to 2D screen coords
+        const sp = new Map();
         const tmp = new THREE.Vector3();
         for (const [name, bone] of this._bones) {
             bone.getWorldPosition(tmp);
             const p = tmp.project(this._camera);
-            screenPos.set(name, { x: (p.x * 0.5 + 0.5) * W, y: (-p.y * 0.5 + 0.5) * H });
+            sp.set(name, { x: (p.x * 0.5 + 0.5) * W, y: (-p.y * 0.5 + 0.5) * H });
         }
 
-        const dotR  = Math.max(4, Math.round(W / 80));
-        const lineW = Math.max(2, Math.round(W / 130));
+        // Standard COCO-18 connections: [boneA, boneB, rgbHex]
+        // Maps our FK bones to the 18-keypoint skeleton ControlNet expects.
+        // Internal bones (torso/spine/chest) are NOT drawn — only surface joints.
+        const LIMBS = [
+            // Head
+            ['neck',        'head',        0xff0055],
+            // Torso centre
+            ['neck',        'upper_arm_R', 0xff0000],
+            ['neck',        'upper_arm_L', 0xff5500],
+            ['upper_arm_R', 'upper_arm_L', 0xff2200], // shoulder span
+            // Right arm
+            ['upper_arm_R', 'forearm_R',   0xffaa00],
+            ['forearm_R',   'hand_R',      0xffff00],
+            // Left arm
+            ['upper_arm_L', 'forearm_L',   0xaaff00],
+            ['forearm_L',   'hand_L',      0x55ff00],
+            // Hip bridge
+            ['neck',        'pelvis',      0x00ffaa],
+            // Right leg
+            ['pelvis',      'thigh_R',     0x00ffcc],
+            ['thigh_R',     'shin_R',      0x00ffff],
+            ['shin_R',      'foot_R',      0x00aaff],
+            // Left leg
+            ['pelvis',      'thigh_L',     0x0055ff],
+            ['thigh_L',     'shin_L',      0x0000ff],
+            ['shin_L',      'foot_L',      0x5500ff],
+        ];
 
-        function hexStr(hex) {
-            return `rgb(${(hex >> 16) & 0xff},${(hex >> 8) & 0xff},${hex & 0xff})`;
+        const dotR  = Math.max(5, Math.round(W / 70));
+        const lineW = Math.max(3, Math.round(W / 90));
+
+        function rgb(hex) {
+            return `rgb(${(hex>>16)&0xff},${(hex>>8)&0xff},${hex&0xff})`;
         }
 
-        // Draw limb connections using gradient between joint colours
         ctx.lineWidth = lineW;
         ctx.lineCap = 'round';
-        for (const [parent, children] of Object.entries(BONE_CHILDREN)) {
-            const pa = screenPos.get(parent);
-            if (!pa) continue;
-            for (const child of children) {
-                const ca = screenPos.get(child);
-                if (!ca) continue;
-                const grad = ctx.createLinearGradient(pa.x, pa.y, ca.x, ca.y);
-                grad.addColorStop(0, hexStr(OPENPOSE_COLORS[parent] ?? 0x888888));
-                grad.addColorStop(1, hexStr(OPENPOSE_COLORS[child]  ?? 0x888888));
-                ctx.strokeStyle = grad;
-                ctx.beginPath();
-                ctx.moveTo(pa.x, pa.y);
-                ctx.lineTo(ca.x, ca.y);
-                ctx.stroke();
-            }
+        ctx.lineJoin = 'round';
+
+        // Draw limb lines
+        for (const [a, b, col] of LIMBS) {
+            const pa = sp.get(a), pb = sp.get(b);
+            if (!pa || !pb) continue;
+            ctx.strokeStyle = rgb(col);
+            ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
         }
 
-        // Draw joint dots on top of lines
-        for (const [name, pos] of screenPos) {
-            ctx.fillStyle = hexStr(OPENPOSE_COLORS[name] ?? 0xaaaaaa);
-            ctx.beginPath();
-            ctx.arc(pos.x, pos.y, dotR, 0, Math.PI * 2);
-            ctx.fill();
+        // Draw keypoint dots on top (use the limb colour of first connection that mentions it)
+        const drawn = new Set();
+        for (const [a, b, col] of LIMBS) {
+            for (const [k, c] of [[a, col],[b, col]]) {
+                if (drawn.has(k)) continue;
+                drawn.add(k);
+                const p = sp.get(k);
+                if (!p) continue;
+                ctx.fillStyle = rgb(c);
+                ctx.beginPath(); ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2); ctx.fill();
+            }
         }
 
         return canvas.toDataURL('image/png');

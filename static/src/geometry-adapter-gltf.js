@@ -270,7 +270,8 @@ export async function buildSegments(gender) {
                     const worldS = new THREE.Vector3();
                     glbNode.getWorldScale(worldS);
                     seg.scale.set(worldS.x * charScale, worldS.y * charScale, worldS.z * charScale);
-                    seg.userData._baseScale = { x: seg.scale.x, y: seg.scale.y, z: seg.scale.z };
+                    seg.userData._baseScale    = { x: seg.scale.x, y: seg.scale.y, z: seg.scale.z };
+                    seg.userData._basePosition = { x: 0, y: 0, z: 0 }; // at bone pivot — no offset
                     group.add(seg);
                 }
             }
@@ -310,7 +311,8 @@ export async function buildSegments(gender) {
                 extraSeg.position.copy(relPos);
                 extraSeg.quaternion.copy(extraWorldQ);
                 extraSeg.scale.set(extraWorldS.x * charScale, extraWorldS.y * charScale, extraWorldS.z * charScale);
-                extraSeg.userData._baseScale = { x: extraSeg.scale.x, y: extraSeg.scale.y, z: extraSeg.scale.z };
+                extraSeg.userData._baseScale    = { x: extraSeg.scale.x, y: extraSeg.scale.y, z: extraSeg.scale.z };
+                extraSeg.userData._basePosition = { x: relPos.x, y: relPos.y, z: relPos.z };
                 group.add(extraSeg);
             }
         }
