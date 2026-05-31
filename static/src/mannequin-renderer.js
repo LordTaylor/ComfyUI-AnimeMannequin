@@ -379,9 +379,12 @@ export class MannequinRenderer {
 
         // MeshDepthMaterial: near=0 (dark), far=255 (bright), background=0 (dark).
         // ControlNet wants near=bright, far=dark. Steps:
-        //   1. Normalize non-background pixels to full [0,255] range for maximum contrast.
-        //   2. Invert so near=255 (white), far=0 (black). Background stays black (no geometry).
-        // Flip Y (WebGL is bottom-up).
+        //   1. Normalize geometry pixels to [DEPTH_MIN, 255] — never to 0 so every character
+        //      pixel is clearly distinguishable from the black background.
+        //      DEPTH_MIN=30: farthest body part = dark-grey, NOT black like background.
+        //   2. Invert within that range: near=255 (white), far=DEPTH_MIN.
+        //   3. Background (v===0) → 0 (true black). Flip Y (WebGL bottom-up).
+        const DEPTH_MIN = 30; // farthest character pixel — dark-grey, never background-black
         let minDepth = 255, maxDepth = 0;
         for (let i = 0; i < W * H; i++) {
             const v = buf[i * 4];
@@ -398,8 +401,8 @@ export class MannequinRenderer {
                 const srcIdx = ((H - 1 - row) * W + col) * 4;
                 const dstIdx = (row * W + col) * 4;
                 const v = buf[srcIdx];
-                // Background (v=0) → 0; geometry: normalize then invert
-                const norm = v === 0 ? 0 : 255 - Math.round((v - minDepth) / depthRange * 255);
+                // Background → true black (0). Geometry → [DEPTH_MIN, 255] inverted range.
+                const norm = v === 0 ? 0 : DEPTH_MIN + Math.round((maxDepth - v) / depthRange * (255 - DEPTH_MIN));
                 imgData.data[dstIdx]     = norm;
                 imgData.data[dstIdx + 1] = norm;
                 imgData.data[dstIdx + 2] = norm;
