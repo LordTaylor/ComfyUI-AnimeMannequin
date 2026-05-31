@@ -141,7 +141,14 @@ export class MannequinEditor {
 
         if (hits.length > 0) {
             const hit = hits[0].object;
-            this._selectBone(hit.userData.boneName, hit);
+            const boneName = hit.userData.boneName;
+            // If the hit was on an invisible hit-target sphere, route to the visible sibling
+            let sphere = hit;
+            if (hit.userData.isHitTarget && hit.parent) {
+                const vis = hit.parent.children.find(c => c.userData.isJoint && !c.userData.isHitTarget);
+                if (vis) sphere = vis;
+            }
+            this._selectBone(boneName, sphere);
         } else {
             this._deselect();
         }
@@ -161,7 +168,8 @@ export class MannequinEditor {
 
     _deselect() {
         if (this._selectedSphere) {
-            this._selectedSphere.material.color.setHex(JOINT_COLOR);
+            const origColor = this._selectedSphere.userData.originalColor ?? JOINT_COLOR;
+            this._selectedSphere.material.color.setHex(origColor);
             this._selectedSphere = null;
         }
         this._selectedBone = null;

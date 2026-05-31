@@ -8,14 +8,42 @@ const JOINT_COLOR   = 0xaaaaaa;
 const SEGMENT_COLOR = 0xcccccc;
 const SELECT_COLOR  = 0x4fc3f7;
 
+const JOINT_RADIUS = 0.055; // visible sphere
+const HIT_RADIUS   = 0.12;  // invisible larger sphere for easier click detection
+
+// OpenPose ControlNet color scheme — matches standard keypoint visualization.
+// Colors follow the rainbow gradient: head=red, neck=orange, R-arm=yellow-green,
+// L-arm=green, R-leg=teal-cyan, L-leg=blue-purple.
+export const OPENPOSE_COLORS = {
+    head:        0xff0000,
+    neck:        0xff5500,
+    chest:       0xffffff,
+    spine:       0xdddddd,
+    torso:       0xaaaaaa,
+    shoulder_R:  0xffaa00,
+    upper_arm_R: 0xffff00,
+    forearm_R:   0xaaff00,
+    hand_R:      0x55ff00,
+    shoulder_L:  0x00ff00,
+    upper_arm_L: 0x00ff55,
+    forearm_L:   0x00ffaa,
+    hand_L:      0x00ffdd,
+    pelvis:      0x00cccc,
+    thigh_R:     0x00ffcc,
+    shin_R:      0x00ffff,
+    foot_R:      0x00aaff,
+    thigh_L:     0x0055ff,
+    shin_L:      0x0000ff,
+    foot_L:      0x5500ff,
+};
+
 // Cached loaded GLBs — avoids re-fetching on gender toggle
-const _glbCache = new Map(); // 'male'|'female' → Map<nodeName, THREE.Object3D>
+const _glbCache   = new Map(); // 'male'|'female' → Map<nodeName, THREE.Object3D>
+const _scaleCache = new Map(); // 'male'|'female' → { charScale, groundOffsetGLB, centerX, centerZ }
 
 // Map our bone names to GLB node names.
-// Verified against actual GLB node list — all names confirmed present in both files.
-// torso is a virtual root (no geometry), so it maps to null.
-// pelvis maps to GEO-pelvis_*_primitive_stylized (dedicated node, not belly).
-const MESH_MAP = {
+// torso is a virtual root (no geometry), maps to null.
+export const MESH_MAP = {
     male: {
         torso:       null,
         spine:       'GEO-belly_male_primitive_stylized',
@@ -67,59 +95,133 @@ async function loadGLB(gender) {
     if (_glbCache.has(key)) return _glbCache.get(key);
     const loader = new GLTFLoader();
     const gltf = await loader.loadAsync(`/mannequin_editor/assets/${key}.glb`);
-    // Ensure world matrices are computed before getWorldPosition calls
     gltf.scene.updateMatrixWorld(true);
-    // Build name → Object3D map
     const nodeMap = new Map();
-    gltf.scene.traverse(obj => { if (obj.name) nodeMap.set(obj.name, obj); });
+    // GLTFLoader sanitizes obj.name (strips dots/brackets for AnimationMixer binding).
+    // obj.userData.name preserves the original GLTF name including .L / .R suffixes.
+    gltf.scene.traverse(obj => {
+        const name = obj.userData.name || obj.name;
+        if (name) nodeMap.set(name, obj);
+    });
     _glbCache.set(key, nodeMap);
     return nodeMap;
 }
 
-function makeToonMat(color) {
-    return new THREE.MeshToonMaterial({ color });
+/**
+ * Compute character-specific scale info from the GLB.
+ * Returns { charScale, groundOffsetGLB, centerX, centerZ } where:
+ *   charScale     — multiply GLB units → scene units (targets WORLD_HEIGHT total height)
+ *   groundOffsetGLB — add to GLB world Y so character foot sits at Y=0 in GLB units
+ *   centerX/Z    — subtract from GLB world X/Z to center character at X=0, Z=0
+ */
+async function getCharacterScaleInfo(gender) {
+    const key = gender === 'F' ? 'female' : 'male';
+    if (_scaleCache.has(key)) return _scaleCache.get(key);
+
+    const boneMap = MESH_MAP[key];
+    const nodeMap = await loadGLB(gender);
+
+    // The pelvis node is the GLB scene root for both models.
+    // Its world position gives us the horizontal centering offset.
+    const pelvisNode = nodeMap.get(boneMap.pelvis);
+    const pelvisWorldPos = new THREE.Vector3();
+    if (pelvisNode) pelvisNode.getWorldPosition(pelvisWorldPos);
+
+    // Use the full character bounding box (all descendants of pelvis) for Y extent.
+    let charBottomY = 0;
+    let charTopY    = 1.5; // fallback
+    if (pelvisNode) {
+        const bbox = new THREE.Box3().setFromObject(pelvisNode);
+        charBottomY = bbox.min.y;
+        charTopY    = bbox.max.y;
+    }
+
+    const charHeightGLB = charTopY - charBottomY;
+    const charScale     = charHeightGLB > 0.1 ? WORLD_HEIGHT / charHeightGLB : 1.0;
+    const info = {
+        charScale,
+        groundOffsetGLB: -charBottomY, // add to GLB world Y so bottom = 0
+        centerX: pelvisWorldPos.x,
+        centerZ: pelvisWorldPos.z,
+    };
+    _scaleCache.set(key, info);
+    return info;
+}
+
+export function makeToonMat(color) {
+    // DoubleSide required: some GLB R-side nodes have scale=(-1,-1,-1) which
+    // inverts winding order, making front-face culling hide the mesh.
+    return new THREE.MeshToonMaterial({ color, side: THREE.DoubleSide });
 }
 
 /**
  * Build segment groups for all bones from GLB meshes.
  * Each group: joint sphere (isJoint=true) + optional GLB mesh segment.
- * @param {string} gender — 'M' or 'F'
- * @returns {Promise<Map<string, THREE.Group>>}
+ * The segment mesh carries the GLB node's local rotation and scale so that
+ * the A-pose is reproduced correctly when all bone quaternions are identity.
  */
 export async function buildSegments(gender) {
     const key = gender === 'F' ? 'female' : 'male';
     const boneMap = MESH_MAP[key];
     const nodeMap = await loadGLB(gender);
+    const { charScale } = await getCharacterScaleInfo(gender);
     const groups = new Map();
 
     for (const boneName of BONE_NAMES) {
         const group = new THREE.Group();
         group.name = boneName;
 
-        // Joint sphere — always present, clickable selection handle
+        // Visible joint dot — MeshBasicMaterial + depthTest:false so it renders
+        // on top of body geometry and is always clickable.
         const sphere = new THREE.Mesh(
-            new THREE.SphereGeometry(0.04, 12, 8),
-            makeToonMat(JOINT_COLOR)
+            new THREE.SphereGeometry(JOINT_RADIUS, 12, 8),
+            new THREE.MeshBasicMaterial({ color: JOINT_COLOR, depthTest: false })
         );
+        sphere.renderOrder = 2;
         sphere.userData.boneName = boneName;
-        sphere.userData.isJoint = true;
+        sphere.userData.isJoint  = true;
+        sphere.userData.originalColor = JOINT_COLOR; // overwritten by setJointColorMode
         group.add(sphere);
+
+        // Invisible hit sphere — larger radius for easier click detection.
+        // material.visible=false prevents rendering but object remains raycasted.
+        const hitSphere = new THREE.Mesh(
+            new THREE.SphereGeometry(HIT_RADIUS, 6, 4),
+            new THREE.MeshBasicMaterial({ visible: false })
+        );
+        hitSphere.userData.boneName    = boneName;
+        hitSphere.userData.isJoint     = true;
+        hitSphere.userData.isHitTarget = true;
+        group.add(hitSphere);
 
         // GLB mesh segment
         const glbNodeName = boneMap[boneName];
         if (glbNodeName) {
             const glbNode = nodeMap.get(glbNodeName);
-            if (glbNode && glbNode.isMesh) {
-                // Use new Mesh directly to avoid the intermediate geometry leak from clone()
-                const seg = new THREE.Mesh(glbNode.geometry.clone(), makeToonMat(SEGMENT_COLOR));
-                seg.userData.boneName = boneName;
-                // Reset local transform — position/scale come from our bone hierarchy.
-                // Do NOT apply WORLD_HEIGHT scale here: bone offsets are already
-                // WORLD_HEIGHT-scaled, so the geometry must remain at GLB unit scale.
-                seg.position.set(0, 0, 0);
-                seg.rotation.set(0, 0, 0);
-                seg.scale.set(1, 1, 1);
-                group.add(seg);
+            if (glbNode) {
+                // GLTFLoader wraps GLTF nodes that have children in a THREE.Group,
+                // not a Mesh — so glbNode.isMesh is false for shoulder, upper_arm, etc.
+                // Fix: traverse to find the first Mesh descendant for geometry.
+                let meshNode = glbNode.isMesh ? glbNode : null;
+                if (!meshNode) {
+                    glbNode.traverse(c => { if (!meshNode && c.isMesh) meshNode = c; });
+                }
+                if (meshNode) {
+                    const seg = new THREE.Mesh(meshNode.geometry.clone(), makeToonMat(SEGMENT_COLOR));
+                    seg.userData.boneName = boneName;
+                    seg.position.set(0, 0, 0);
+                    // Use WORLD quaternion — accounts for all parent rotations in A-pose.
+                    // Bone starts with identity world rotation, so seg.localQ = seg.worldQ
+                    // = glbNode.worldQ, which correctly orients geometry in scene space.
+                    const worldQ = new THREE.Quaternion();
+                    glbNode.getWorldQuaternion(worldQ);
+                    seg.quaternion.copy(worldQ);
+                    // Use WORLD scale — propagates parent mirroring (scale=-1,-1,-1 for R-side).
+                    const worldS = new THREE.Vector3();
+                    glbNode.getWorldScale(worldS);
+                    seg.scale.set(worldS.x * charScale, worldS.y * charScale, worldS.z * charScale);
+                    group.add(seg);
+                }
             }
         }
 
@@ -129,47 +231,55 @@ export async function buildSegments(gender) {
 }
 
 /**
- * Compute local offsets for each bone.
- * Uses GLB world positions scaled to WORLD_HEIGHT, with torso as scene root.
- * Falls back to zero vector for unmapped or missing bones.
- * @param {string} gender — 'M' or 'F'
- * @returns {Promise<Map<string, THREE.Vector3>>}
+ * Compute world-space bone positions in scene units.
+ * Bone positions are derived from GLB node world positions:
+ *   - centered so character X/Z ≈ 0 (removes pelvis origin offset)
+ *   - grounded so character foot bottom = Y=0
+ *   - scaled by charScale (WORLD_HEIGHT / actual GLB character height)
  */
 export async function computeBoneOffsets(gender) {
     const key = gender === 'F' ? 'female' : 'male';
     const boneMap = MESH_MAP[key];
     const nodeMap = await loadGLB(gender);
+    const { charScale, groundOffsetGLB, centerX, centerZ } = await getCharacterScaleInfo(gender);
     const offsets = new Map();
 
-    // Helper: get world position of a named GLB node, scaled to WORLD_HEIGHT
-    function scaledWorldPos(glbNodeName) {
-        if (!glbNodeName) return null;
-        const node = nodeMap.get(glbNodeName);
+    function getWorldPos(nodeName) {
+        if (!nodeName) return null;
+        const node = nodeMap.get(nodeName);
         if (!node) return null;
         const v = new THREE.Vector3();
         node.getWorldPosition(v);
-        return v.multiplyScalar(WORLD_HEIGHT);
+        return v;
     }
 
-    // Position torso so foot rests at Y=0 in our scene
-    const footPos = scaledWorldPos(boneMap.foot_L);
-    const torsoGLBPos = scaledWorldPos(boneMap.spine) ?? new THREE.Vector3(0, WORLD_HEIGHT * 0.45, 0);
-    const groundOffset = footPos ? -footPos.y : 0;
-    const torsoY = torsoGLBPos.y + groundOffset;
+    // Convert GLB world position → scene position:
+    //   remove horizontal character offset, apply ground offset, scale to scene units
+    function toScenePos(worldPos) {
+        return new THREE.Vector3(
+            (worldPos.x - centerX) * charScale,
+            (worldPos.y + groundOffsetGLB) * charScale,
+            (worldPos.z - centerZ) * charScale
+        );
+    }
 
-    offsets.set('torso', new THREE.Vector3(0, torsoY, 0));
+    // Torso is our virtual FK root — placed at the spine (belly) GLB world position
+    const spinePos = getWorldPos(boneMap.spine)
+        ?? new THREE.Vector3(centerX, -groundOffsetGLB + 0.5, centerZ);
+    offsets.set('torso', toScenePos(spinePos));
 
     for (const boneName of BONE_NAMES) {
         if (boneName === 'torso') continue;
-        const pos = scaledWorldPos(boneMap[boneName]);
+        const pos = getWorldPos(boneMap[boneName]);
         if (pos) {
-            offsets.set(boneName, pos.clone().setY(pos.y + groundOffset));
+            offsets.set(boneName, toScenePos(pos));
         } else {
-            offsets.set(boneName, new THREE.Vector3(0, 0, 0));
+            // Fallback for unmapped bones: place at torso
+            offsets.set(boneName, (offsets.get('torso') ?? new THREE.Vector3()).clone());
         }
     }
 
     return offsets;
 }
 
-export { SELECT_COLOR, JOINT_COLOR };
+export { SELECT_COLOR, JOINT_COLOR, JOINT_RADIUS, HIT_RADIUS };
