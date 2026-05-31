@@ -144,7 +144,7 @@ function openMannequinModal(node) {
             // Upload pose + depth + canny
             const poseFile  = await uploadImage(images.pose,  "mannequin_pose.png");
             const depthFile = await uploadImage(images.depth, "mannequin_depth.png");
-            const cannyFile = await uploadImage(images.canny, "mannequin_canny.png");
+            const cannyFile = images.canny ? await uploadImage(images.canny, "mannequin_canny.png") : "";
 
             // Update node widgets
             const pw = node.widgets?.find(w => w.name === "pose_file");
