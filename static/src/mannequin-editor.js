@@ -82,6 +82,28 @@ export class MannequinEditor {
         this._renderer.markDirty();
     }
 
+    mirrorPose(direction = 'L_to_R') {
+        const pairs = [
+            ['shoulder_L', 'shoulder_R'],
+            ['upper_arm_L', 'upper_arm_R'],
+            ['forearm_L',   'forearm_R'],
+            ['hand_L',      'hand_R'],
+            ['thigh_L',     'thigh_R'],
+            ['shin_L',      'shin_R'],
+            ['foot_L',      'foot_R'],
+        ];
+        for (const [l, r] of pairs) {
+            const [src, dst] = direction === 'L_to_R' ? [l, r] : [r, l];
+            const srcBone = this._renderer.bones.get(src);
+            const dstBone = this._renderer.bones.get(dst);
+            if (!srcBone || !dstBone) continue;
+            const q = srcBone.quaternion;
+            dstBone.quaternion.set(-q.x, q.y, q.z, q.w);
+        }
+        this._saveUndoSnapshot();
+        this._renderer.markDirty();
+    }
+
     _saveUndoSnapshot() {
         const json = JSON.stringify(this._renderer.getSceneData(this._gender));
         this._undoStack.push(json);

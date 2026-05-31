@@ -13,6 +13,8 @@ button { padding: 5px 12px; border: none; border-radius: 4px; cursor: pointer; f
 #btn-undo   { background: #333; color: #aaa; }
 #btn-reset  { background: #333; color: #aaa; }
 #btn-poses  { background: #333; color: #aaa; }
+#btn-mirror-lr { background: #333; color: #aaa; }
+#btn-mirror-rl { background: #333; color: #aaa; }
 #btn-save   { background: #2e7d32; color: #fff; display: none; }
 #btn-dl-pose  { background: #1565c0; color: #fff; display: none; }
 #btn-dl-depth { background: #1565c0; color: #fff; display: none; }
@@ -28,6 +30,8 @@ canvas { display: block; width: 100%; height: 100%; }
   <button id="btn-gender">F</button>
   <button id="btn-undo">Undo</button>
   <button id="btn-reset">Reset</button>
+  <button id="btn-mirror-lr">L→R</button>
+  <button id="btn-mirror-rl">R→L</button>
   <button id="btn-poses">Poses</button>
   <span id="status">Loading...</span>
   <button id="btn-save">Close &amp; Save</button>
@@ -80,6 +84,8 @@ btnGender.addEventListener('click', async () => {
 });
 btnUndo.addEventListener('click', () => editor.undo());
 btnReset.addEventListener('click', () => editor.resetPose());
+document.getElementById('btn-mirror-lr').addEventListener('click', () => editor.mirrorPose('L_to_R'));
+document.getElementById('btn-mirror-rl').addEventListener('click', () => editor.mirrorPose('R_to_L'));
 document.getElementById('btn-poses').addEventListener('click', () => poseLib.toggle());
 
 // ComfyUI mode
