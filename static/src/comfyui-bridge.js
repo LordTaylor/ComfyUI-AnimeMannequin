@@ -29,7 +29,7 @@ export class ComfyuiBridge {
             const { resolve, reject, timer } = this._pending.get(d.requestId);
             this._pending.delete(d.requestId);
             clearTimeout(timer);
-            if (d.type === 'error') reject(new Error(d.error));
+            if (d.type === 'error') reject(new Error(d.error?.message ?? String(d.error)));
             else resolve(d.payload);
         }
     }
@@ -200,7 +200,7 @@ export class ComfyuiBridge {
                 if (d?.cmd === 'mannequin' && d?.requestId === requestId) {
                     window.removeEventListener('message', handler);
                     clearTimeout(timer);
-                    if (d.type === 'error') reject(new Error(d.error));
+                    if (d.type === 'error') reject(new Error(d.error?.message ?? String(d.error)));
                     else resolve(d.payload);
                 }
             }

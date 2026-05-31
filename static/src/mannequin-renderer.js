@@ -394,11 +394,15 @@ export class MannequinRenderer {
         const depthDataUrl = depthCanvas.toDataURL('image/png');
 
         // --- CANNY render — joints hidden so they don't appear as round artifacts ---
+        let cannyDataUrl;
         setJointsVisible(false);
-        this._renderer.setSize(W, H);
-        this._renderer.render(this._scene, this._camera);
-        const cannyDataUrl = sobelCanny(this._renderer.domElement);
-        setJointsVisible(true);
+        try {
+            this._renderer.setSize(W, H);
+            this._renderer.render(this._scene, this._camera);
+            cannyDataUrl = sobelCanny(this._renderer.domElement);
+        } finally {
+            setJointsVisible(true);
+        }
 
         // --- OPENPOSE 2D render ---
         const openposeDataUrl = this._captureOpenPose(W, H);
@@ -523,8 +527,10 @@ export class MannequinRenderer {
             const [a, b] = SKELETON_LIMBS[i];
             const boneA = this._bones.get(a);
             const boneB = this._bones.get(b);
-            if (boneA) { boneA.getWorldPosition(tmp); posAttr.setXYZ(i * 2,     tmp.x, tmp.y, tmp.z); }
-            if (boneB) { boneB.getWorldPosition(tmp); posAttr.setXYZ(i * 2 + 1, tmp.x, tmp.y, tmp.z); }
+            if (boneA && boneB) {
+                boneA.getWorldPosition(tmp); posAttr.setXYZ(i * 2,     tmp.x, tmp.y, tmp.z);
+                boneB.getWorldPosition(tmp); posAttr.setXYZ(i * 2 + 1, tmp.x, tmp.y, tmp.z);
+            }
         }
         posAttr.needsUpdate = true;
     }
