@@ -37,6 +37,55 @@ export const OPENPOSE_COLORS = {
     foot_L:      0x5500ff,
 };
 
+// GLB sub-meshes that attach to a bone without their own FK pivot.
+// These are children of the bone's GLB node (e.g. breasts hang on chest).
+const EXTRA_NODES = {
+    female: {
+        chest: [
+            { name: 'GEO-breast_female_primitive_stylized.L', proportionGroup: 'bust' },
+            { name: 'GEO-breast_female_primitive_stylized.R', proportionGroup: 'bust' },
+        ],
+        head: [
+            { name: 'GEO-ear_female_primitive_stylized.L',  proportionGroup: null },
+            { name: 'GEO-ear_female_primitive_stylized.R',  proportionGroup: null },
+            { name: 'GEO-eye_female_primitive_stylized.L',  proportionGroup: null },
+            { name: 'GEO-eye_female_primitive_stylized.R',  proportionGroup: null },
+        ],
+    },
+    male: {
+        head: [
+            { name: 'GEO-ear_male_primitive_stylized.L',             proportionGroup: null },
+            { name: 'GEO-ear_male_primitive_stylized.R',             proportionGroup: null },
+            { name: 'GEO-eye_male_primitive_stylized.L',             proportionGroup: null },
+            { name: 'GEO-eye_male_primitive_stylized.R',             proportionGroup: null },
+            { name: 'GEO-nose_male_primitive_stylized',              proportionGroup: null },
+            { name: 'GEO-nose_bridge_male_primitive_stylized',       proportionGroup: null },
+        ],
+    },
+};
+
+// Which proportion slider affects each bone's main segment.
+const SEGMENT_PROPORTION_GROUP = {
+    head:        'head',
+    chest:       'waist',
+    spine:       'waist',
+    pelvis:      'hips',
+    thigh_L:     'legs',
+    thigh_R:     'legs',
+    shin_L:      'legs',
+    shin_R:      'legs',
+    foot_L:      'legs',
+    foot_R:      'legs',
+    shoulder_L:  'arms',
+    shoulder_R:  'arms',
+    upper_arm_L: 'arms',
+    upper_arm_R: 'arms',
+    forearm_L:   'arms',
+    forearm_R:   'arms',
+    hand_L:      'arms',
+    hand_R:      'arms',
+};
+
 // Cached loaded GLBs — avoids re-fetching on gender toggle
 const _glbCache   = new Map(); // 'male'|'female' → Map<nodeName, THREE.Object3D>
 const _scaleCache = new Map(); // 'male'|'female' → { charScale, groundOffsetGLB, centerX, centerZ }
@@ -209,6 +258,7 @@ export async function buildSegments(gender) {
                 if (meshNode) {
                     const seg = new THREE.Mesh(meshNode.geometry.clone(), makeToonMat(SEGMENT_COLOR));
                     seg.userData.boneName = boneName;
+                    seg.userData.proportionGroup = SEGMENT_PROPORTION_GROUP[boneName] ?? null;
                     seg.position.set(0, 0, 0);
                     // Use WORLD quaternion — accounts for all parent rotations in A-pose.
                     // Bone starts with identity world rotation, so seg.localQ = seg.worldQ
@@ -220,8 +270,51 @@ export async function buildSegments(gender) {
                     const worldS = new THREE.Vector3();
                     glbNode.getWorldScale(worldS);
                     seg.scale.set(worldS.x * charScale, worldS.y * charScale, worldS.z * charScale);
+                    seg.userData._baseScale = { x: seg.scale.x, y: seg.scale.y, z: seg.scale.z };
                     group.add(seg);
                 }
+            }
+        }
+
+        // Add extra sub-meshes (breasts, ears, eyes, nose)
+        const extras = (EXTRA_NODES[key]?.[boneName]) ?? [];
+        for (const { name: extraName, proportionGroup: extraPG } of extras) {
+            const extraNode = nodeMap.get(extraName);
+            if (!extraNode) continue;
+
+            // Find all mesh descendants of the extra node (handles eye→eyelid hierarchy)
+            const meshes = [];
+            extraNode.traverse(c => { if (c.isMesh) meshes.push(c); });
+            if (!meshes.length) {
+                if (extraNode.isMesh) meshes.push(extraNode);
+            }
+
+            // Relative position: extra world pos minus parent bone world pos (both in GLB space), scaled
+            const parentGlbNode = nodeMap.get(glbNodeName);
+            const parentWorldPos = new THREE.Vector3();
+            if (parentGlbNode) parentGlbNode.getWorldPosition(parentWorldPos);
+            const extraWorldPos = new THREE.Vector3();
+            extraNode.getWorldPosition(extraWorldPos);
+            const relPos = new THREE.Vector3(
+                (extraWorldPos.x - parentWorldPos.x) * charScale,
+                (extraWorldPos.y - parentWorldPos.y) * charScale,
+                (extraWorldPos.z - parentWorldPos.z) * charScale,
+            );
+
+            const extraWorldQ = new THREE.Quaternion();
+            extraNode.getWorldQuaternion(extraWorldQ);
+            const extraWorldS = new THREE.Vector3();
+            extraNode.getWorldScale(extraWorldS);
+
+            for (const meshNode of meshes) {
+                const extraSeg = new THREE.Mesh(meshNode.geometry.clone(), makeToonMat(SEGMENT_COLOR));
+                extraSeg.userData.boneName        = boneName;
+                extraSeg.userData.proportionGroup = extraPG;
+                extraSeg.position.copy(relPos);
+                extraSeg.quaternion.copy(extraWorldQ);
+                extraSeg.scale.set(extraWorldS.x * charScale, extraWorldS.y * charScale, extraWorldS.z * charScale);
+                extraSeg.userData._baseScale = { x: extraSeg.scale.x, y: extraSeg.scale.y, z: extraSeg.scale.z };
+                group.add(extraSeg);
             }
         }
 

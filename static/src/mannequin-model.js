@@ -82,6 +82,10 @@ export const PROPORTIONS = {
 
 const IDENTITY_QUAT = [0, 0, 0, 1];
 
+export function defaultProportions() {
+    return { head: 1.0, bust: 1.0, hips: 1.0, waist: 1.0, legs: 1.0, arms: 1.0 };
+}
+
 export function defaultScene(gender = 'F') {
     const bones = {};
     for (const name of BONE_NAMES) {
@@ -92,6 +96,7 @@ export function defaultScene(gender = 'F') {
         gender,
         bones,
         camera: { azimuth: 0, elevation: 5, distance: 2.5 },
+        proportions: defaultProportions(),
     };
 }
 
@@ -108,5 +113,6 @@ export function jsonToScene(json) {
     for (const name of BONE_NAMES) {
         if (!parsed.bones[name]) parsed.bones[name] = { rotation: [...IDENTITY_QUAT] };
     }
+    if (!parsed.proportions) parsed.proportions = defaultProportions();
     return parsed;
 }

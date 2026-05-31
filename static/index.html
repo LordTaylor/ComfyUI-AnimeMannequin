@@ -21,6 +21,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 #btn-random      { background: #6a1b9a; color: #fff; }
 #btn-random-mode { background: #333; color: #aaa; padding: 5px 8px; font-size: 14px; }
 #btn-random-mode.wild { background: #bf360c; color: #fff; }
+#btn-props { background: #333; color: #aaa; }
 #btn-save   { background: #2e7d32; color: #fff; display: none; }
 #btn-dl-pose  { background: #1565c0; color: #fff; display: none; }
 #btn-dl-depth { background: #1565c0; color: #fff; display: none; }
@@ -62,6 +63,7 @@ canvas { display: block; width: 100%; height: 100%; }
   <button id="btn-poses">Poses</button>
   <button id="btn-random">Random</button>
   <button id="btn-random-mode" title="Safe: anatomical limits  |  Wild: anything goes">🔒</button>
+  <button id="btn-props">Props</button>
   <button id="btn-colors" class="active">OpenPose</button>
   <span id="status">Loading...</span>
   <button id="btn-save">Close &amp; Save</button>
@@ -84,6 +86,7 @@ import { MannequinEditor }   from './src/mannequin-editor.js';
 import { ComfyuiBridge }     from './src/comfyui-bridge.js';
 import { defaultScene, jsonToScene } from './src/mannequin-model.js';
 import { PoseLibrary } from './src/pose-library.js';
+import { ProportionsPanel } from './src/proportions-panel.js';
 
 const params = new URLSearchParams(location.search);
 const mode   = params.get('mode') ?? 'standalone'; // 'comfyui' | 'standalone'
@@ -93,6 +96,9 @@ const renderer = new MannequinRenderer(canvas);
 const editor   = new MannequinEditor(renderer, canvas);
 const poseLib  = new PoseLibrary(editor, renderer);
 poseLib.mount(document.body);
+
+const propsPanel = new ProportionsPanel(renderer);
+propsPanel.mount(document.body);
 
 // Loading overlay helpers
 const loadingOverlay = document.getElementById('loading-overlay');
@@ -139,6 +145,7 @@ btnGender.addEventListener('click', async () => {
     try {
         await editor.setGender(next);
         btnGender.textContent = next;
+        propsPanel.setGender(next);
     } finally {
         btnGender.disabled = false;
         hideLoading();
@@ -160,6 +167,7 @@ btnRandomMode.addEventListener('click', () => {
         : 'Wild: anything goes  |  click for Safe';
 });
 document.getElementById('btn-random').addEventListener('click', () => editor.generateRandomPose(randomMode));
+document.getElementById('btn-props').addEventListener('click', () => propsPanel.toggle());
 
 const btnColors = document.getElementById('btn-colors');
 let colorMode = 'openpose';
