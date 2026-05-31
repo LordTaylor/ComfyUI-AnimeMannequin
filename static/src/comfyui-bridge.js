@@ -140,7 +140,8 @@ export class ComfyuiBridge {
                     result = this._renderer.captureImages();
                     break;
                 case 'RandomPose':
-                    result = this._editor.generateRandomPose();
+                    // arg = 'safe' | 'wild' (default: 'safe')
+                    result = this._editor.generateRandomPose(arg ?? 'safe');
                     break;
 
                 // ── Discovery / capabilities ─────────────────────────────────

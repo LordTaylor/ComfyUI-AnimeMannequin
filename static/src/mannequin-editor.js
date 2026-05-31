@@ -118,33 +118,59 @@ export class MannequinEditor {
         this._renderer.markDirty();
     }
 
-    generateRandomPose() {
-        const DEG = Math.PI / 180;
-        const rnd = (lo, hi) => (lo + Math.random() * (hi - lo)) * DEG;
+    // [minX, maxX, minY, maxY, minZ, maxZ] in degrees
+    static RANDOM_LIMITS_SAFE = {
+        torso:       null,
+        spine:       [-15, 15, -20, 20, -12, 12],
+        chest:       [-12, 12, -12, 12,  -8,  8],
+        neck:        [-25, 25, -35, 35, -15, 15],
+        head:        [-18, 18, -30, 30, -12, 12],
+        shoulder_L:  [-30, 55, -25, 25, -70, 50],
+        upper_arm_L: [-80, 50, -50, 50, -25, 25],
+        forearm_L:   [  0, 100, -8,  8,  -8,  8],
+        hand_L:      [-25, 25, -25, 25, -15, 15],
+        shoulder_R:  [-30, 55, -25, 25, -50, 70],
+        upper_arm_R: [-80, 50, -50, 50, -25, 25],
+        forearm_R:   [  0, 100, -8,  8,  -8,  8],
+        hand_R:      [-25, 25, -25, 25, -15, 15],
+        pelvis:      [-12, 12, -12, 12,  -8,  8],
+        thigh_L:     [-55, 35, -25, 25, -35, 15],
+        shin_L:      [-100, 0,  -4,  4,  -4,  4],
+        foot_L:      [-25, 25, -12, 12, -12, 12],
+        thigh_R:     [-55, 35, -25, 25, -15, 35],
+        shin_R:      [-100, 0,  -4,  4,  -4,  4],
+        foot_R:      [-25, 25, -12, 12, -12, 12],
+    };
 
-        // Anatomical limits per bone [minX, maxX, minY, maxY, minZ, maxZ] degrees
-        const LIMITS = {
-            torso:       null,
-            spine:       [-20, 20, -25, 25, -15, 15],
-            chest:       [-15, 15, -15, 15, -10, 10],
-            neck:        [-30, 30, -40, 40, -20, 20],
-            head:        [-20, 20, -35, 35, -15, 15],
-            shoulder_L:  [-40, 60, -30, 30, -80, 60],
-            upper_arm_L: [-90, 60, -60, 60, -30, 30],
-            forearm_L:   [  0,110, -10, 10, -10, 10],
-            hand_L:      [-30, 30, -30, 30, -20, 20],
-            shoulder_R:  [-40, 60, -30, 30, -60, 80],
-            upper_arm_R: [-90, 60, -60, 60, -30, 30],
-            forearm_R:   [  0,110, -10, 10, -10, 10],
-            hand_R:      [-30, 30, -30, 30, -20, 20],
-            pelvis:      [-15, 15, -15, 15, -10, 10],
-            thigh_L:     [-60, 40, -30, 30, -40, 20],
-            shin_L:      [-110, 0,  -5,  5,  -5,  5],
-            foot_L:      [-30, 30, -15, 15, -15, 15],
-            thigh_R:     [-60, 40, -30, 30, -20, 40],
-            shin_R:      [-110, 0,  -5,  5,  -5,  5],
-            foot_R:      [-30, 30, -15, 15, -15, 15],
-        };
+    static RANDOM_LIMITS_WILD = {
+        torso:       null,
+        spine:       [-45, 45, -45, 45, -30, 30],
+        chest:       [-35, 35, -35, 35, -25, 25],
+        neck:        [-55, 55, -70, 70, -35, 35],
+        head:        [-40, 40, -65, 65, -30, 30],
+        shoulder_L:  [-60,130, -60, 60, -120, 90],
+        upper_arm_L: [-130, 90, -90, 90, -60, 60],
+        forearm_L:   [  0, 145, -20, 20, -20, 20],
+        hand_L:      [-60, 60, -60, 60, -40, 40],
+        shoulder_R:  [-60,130, -60, 60,  -90,120],
+        upper_arm_R: [-130, 90, -90, 90, -60, 60],
+        forearm_R:   [  0, 145, -20, 20, -20, 20],
+        hand_R:      [-60, 60, -60, 60, -40, 40],
+        pelvis:      [-30, 30, -30, 30, -20, 20],
+        thigh_L:     [-100, 75, -55, 55, -75, 40],
+        shin_L:      [-140,  0, -12, 12, -12, 12],
+        foot_L:      [-60, 60, -30, 30, -30, 30],
+        thigh_R:     [-100, 75, -55, 55, -40, 75],
+        shin_R:      [-140,  0, -12, 12, -12, 12],
+        foot_R:      [-60, 60, -30, 30, -30, 30],
+    };
+
+    generateRandomPose(mode = 'safe') {
+        const DEG    = Math.PI / 180;
+        const rnd    = (lo, hi) => (lo + Math.random() * (hi - lo)) * DEG;
+        const LIMITS = mode === 'wild'
+            ? MannequinEditor.RANDOM_LIMITS_WILD
+            : MannequinEditor.RANDOM_LIMITS_SAFE;
 
         this._saveUndoSnapshot();
         const euler = new THREE.Euler();
