@@ -114,6 +114,10 @@ export class MannequinRenderer {
             this._bones.set(name, obj);
         }
 
+        // Position root bone so feet land at Y=0
+        const torsoOffset = offsets.get('torso') ?? new THREE.Vector3();
+        this._bones.get('torso').position.copy(torsoOffset);
+
         // Build hierarchy
         this._mannequinRoot.add(this._bones.get('torso'));
         this._buildHierarchy('torso', offsets);
@@ -132,11 +136,15 @@ export class MannequinRenderer {
 
     _buildHierarchy(parentName, offsets) {
         const children = BONE_CHILDREN[parentName] ?? [];
-        const parentObj = this._bones.get(parentName);
+        const parentObj  = this._bones.get(parentName);
+        const parentWorld = offsets.get(parentName) ?? new THREE.Vector3();
         for (const childName of children) {
-            const childObj = this._bones.get(childName);
-            const offset = offsets.get(childName) ?? new THREE.Vector3();
-            childObj.position.copy(offset);
+            const childObj   = this._bones.get(childName);
+            const childWorld = offsets.get(childName) ?? new THREE.Vector3();
+            // Local offset = child world target minus parent world target.
+            // Using world-as-local caused deep bones to accumulate positions
+            // (each ancestor's world position stacked on top of the child's).
+            childObj.position.copy(childWorld.clone().sub(parentWorld));
             parentObj.add(childObj);
             this._buildHierarchy(childName, offsets);
         }
