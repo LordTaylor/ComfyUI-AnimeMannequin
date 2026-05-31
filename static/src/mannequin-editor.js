@@ -1,7 +1,7 @@
 import * as THREE from '../lib/three.module.js';
 import { OrbitControls } from '../lib/OrbitControls.js';
 import { TransformControls } from '../lib/TransformControls.js';
-import { SELECT_COLOR, JOINT_COLOR } from './geometry-adapter-capsule.js';
+import { SELECT_COLOR, JOINT_COLOR } from './geometry-adapter-gltf.js';
 import { defaultScene } from './mannequin-model.js';
 
 const UNDO_LIMIT = 20;
@@ -45,19 +45,19 @@ export class MannequinEditor {
 
     get gender() { return this._gender; }
 
-    buildMannequin(gender, sceneData) {
+    async buildMannequin(gender, sceneData) {
         this._gender = gender;
         this._deselect();
-        this._renderer.buildMannequin(gender, sceneData);
+        await this._renderer.buildMannequin(gender, sceneData);
         this._undoStack = [];
         this._saveUndoSnapshot();
         this._renderer.markDirty();
     }
 
-    setGender(gender) {
+    async setGender(gender) {
         const currentScene = this._renderer.getSceneData(this._gender);
         currentScene.gender = gender;
-        this.buildMannequin(gender, currentScene);
+        await this.buildMannequin(gender, currentScene);
     }
 
     getSceneData() {
@@ -79,6 +79,28 @@ export class MannequinEditor {
         this._undoStack = [];
         this._saveUndoSnapshot();
         this._deselect();
+        this._renderer.markDirty();
+    }
+
+    mirrorPose(direction = 'L_to_R') {
+        const pairs = [
+            ['shoulder_L', 'shoulder_R'],
+            ['upper_arm_L', 'upper_arm_R'],
+            ['forearm_L',   'forearm_R'],
+            ['hand_L',      'hand_R'],
+            ['thigh_L',     'thigh_R'],
+            ['shin_L',      'shin_R'],
+            ['foot_L',      'foot_R'],
+        ];
+        for (const [l, r] of pairs) {
+            const [src, dst] = direction === 'L_to_R' ? [l, r] : [r, l];
+            const srcBone = this._renderer.bones.get(src);
+            const dstBone = this._renderer.bones.get(dst);
+            if (!srcBone || !dstBone) continue;
+            const q = srcBone.quaternion;
+            dstBone.quaternion.set(-q.x, q.y, q.z, q.w);
+        }
+        this._saveUndoSnapshot();
         this._renderer.markDirty();
     }
 
