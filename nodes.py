@@ -26,6 +26,12 @@ class AnimeMannequinNode:
     CATEGORY      = "AnimeMannequin"
     OUTPUT_NODE   = False
 
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        # Filenames are always the same (mannequin_pose.png etc.) — returning NaN
+        # forces ComfyUI to re-execute every queue run instead of using cached output.
+        return float("nan")
+
     @staticmethod
     def _safe_join(base: str, filename: str) -> str:
         if not filename:

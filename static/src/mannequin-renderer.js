@@ -343,11 +343,11 @@ export class MannequinRenderer {
         this._renderer.render(this._scene, this._camera);
         const poseDataUrl = this._renderer.domElement.toDataURL('image/png');
 
-        // --- DEPTH render ---
+        // --- DEPTH render (joints hidden — they'd register as near-surface noise) ---
+        setJointsVisible(false);
         this._fitDepthCamera(W, H);
         this._depthTarget.setSize(W, H);
 
-        // Swap materials to depth — always restore in finally to avoid permanent black screen
         const buf = new Uint8Array(W * H * 4);
         try {
             this._scene.overrideMaterial = this._depthMat;
@@ -359,10 +359,20 @@ export class MannequinRenderer {
             this._renderer.setRenderTarget(null);
             this._scene.overrideMaterial = null;
         }
+        setJointsVisible(true);
 
-        // Invert: MeshDepthMaterial encodes far=black, we want near=white
-        // Red channel = depth value, already 0(near)=255-ish, 1(far)=0
-        // Flip Y (WebGL is bottom-up)
+        // MeshDepthMaterial: near=0 (dark), far=255 (bright), background=0 (dark).
+        // ControlNet wants near=bright, far=dark. Steps:
+        //   1. Normalize non-background pixels to full [0,255] range for maximum contrast.
+        //   2. Invert so near=255 (white), far=0 (black). Background stays black (no geometry).
+        // Flip Y (WebGL is bottom-up).
+        let minDepth = 255, maxDepth = 0;
+        for (let i = 0; i < W * H; i++) {
+            const v = buf[i * 4];
+            if (v > 0) { if (v < minDepth) minDepth = v; if (v > maxDepth) maxDepth = v; }
+        }
+        const depthRange = maxDepth - minDepth || 1;
+
         const depthCanvas = document.createElement('canvas');
         depthCanvas.width = W; depthCanvas.height = H;
         const ctx = depthCanvas.getContext('2d');
@@ -371,10 +381,12 @@ export class MannequinRenderer {
             for (let col = 0; col < W; col++) {
                 const srcIdx = ((H - 1 - row) * W + col) * 4;
                 const dstIdx = (row * W + col) * 4;
-                const v = buf[srcIdx]; // red channel = depth
-                imgData.data[dstIdx]     = v;
-                imgData.data[dstIdx + 1] = v;
-                imgData.data[dstIdx + 2] = v;
+                const v = buf[srcIdx];
+                // Background (v=0) → 0; geometry: normalize then invert
+                const norm = v === 0 ? 0 : 255 - Math.round((v - minDepth) / depthRange * 255);
+                imgData.data[dstIdx]     = norm;
+                imgData.data[dstIdx + 1] = norm;
+                imgData.data[dstIdx + 2] = norm;
                 imgData.data[dstIdx + 3] = 255;
             }
         }
