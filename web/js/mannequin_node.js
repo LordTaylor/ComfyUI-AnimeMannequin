@@ -216,22 +216,39 @@ app.registerExtension({
                 "padding:8px 12px", "background:#1565c0", "color:#fff",
                 "border:none", "border-radius:6px", "cursor:pointer",
                 "font-size:13px", "font-weight:bold", "display:block",
+                "box-sizing:border-box",
             ].join(";");
             const self = this;
             btn.onclick = e => { e.stopPropagation(); openMannequinModal(self); };
             this.addDOMWidget("open_editor_btn", "btn", btn, {
                 getValue() { return ""; }, setValue() {},
-                computeSize() { return [0, 42]; }, serialize: false,
+                // 240 = min node width so button never overflows
+                computeSize() { return [240, 46]; }, serialize: false,
             });
 
-            // Thumbnail preview image
+            // Thumbnail preview — sized to match output aspect ratio (w × h widgets)
             const img = document.createElement("img");
-            img.style.cssText = "width:calc(100% - 16px);margin:2px 8px;border-radius:4px;display:block;background:#111;min-height:40px;object-fit:contain;";
+            img.style.cssText = [
+                "width:calc(100% - 16px)", "margin:2px 8px 4px 8px",
+                "border-radius:4px", "display:block",
+                "background:#111", "object-fit:cover",
+                "box-sizing:border-box",
+            ].join(";");
             img.alt = "No pose captured yet";
             this._thumbnailImg = img;
             this.addDOMWidget("thumbnail", "thumbnail", img, {
                 getValue() { return ""; }, setValue() {},
-                computeSize() { return [0, 80]; }, serialize: false,
+                // height = available_width * (outputH / outputW) so thumbnail matches
+                // the actual render resolution aspect ratio
+                computeSize(width) {
+                    const nodeW = Math.max((width ?? self.size?.[0] ?? 256) - 16, 64);
+                    const outW  = self.widgets?.find(w => w.name === "width")?.value  ?? 768;
+                    const outH  = self.widgets?.find(w => w.name === "height")?.value ?? 1024;
+                    const h     = Math.round(nodeW * (outH / outW));
+                    img.style.height = h + "px";
+                    return [0, h + 6];  // +6 for top/bottom margin
+                },
+                serialize: false,
             });
 
             // Make file widgets read-only
