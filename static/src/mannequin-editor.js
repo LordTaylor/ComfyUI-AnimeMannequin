@@ -45,19 +45,19 @@ export class MannequinEditor {
 
     get gender() { return this._gender; }
 
-    buildMannequin(gender, sceneData) {
+    async buildMannequin(gender, sceneData) {
         this._gender = gender;
         this._deselect();
-        this._renderer.buildMannequin(gender, sceneData);
+        await this._renderer.buildMannequin(gender, sceneData);
         this._undoStack = [];
         this._saveUndoSnapshot();
         this._renderer.markDirty();
     }
 
-    setGender(gender) {
+    async setGender(gender) {
         const currentScene = this._renderer.getSceneData(this._gender);
         currentScene.gender = gender;
-        this.buildMannequin(gender, currentScene);
+        await this.buildMannequin(gender, currentScene);
     }
 
     getSceneData() {

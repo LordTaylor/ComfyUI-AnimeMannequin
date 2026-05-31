@@ -1,6 +1,6 @@
 import * as THREE from '../lib/three.module.js';
 import { BONE_NAMES, BONE_CHILDREN, defaultScene, jsonToScene } from './mannequin-model.js';
-import { buildSegments, computeBoneOffsets, WORLD_HEIGHT } from './geometry-adapter-capsule.js';
+import { buildSegments, computeBoneOffsets, WORLD_HEIGHT } from './geometry-adapter-gltf.js';
 
 export class MannequinRenderer {
     constructor(canvas) {
@@ -55,7 +55,7 @@ export class MannequinRenderer {
 
     markDirty() { this._dirty = true; }
 
-    buildMannequin(gender, sceneData) {
+    async buildMannequin(gender, sceneData) {
         this._gender = gender;
         this._mannequinRoot.traverse(obj => {
             obj.geometry?.dispose();
@@ -65,8 +65,8 @@ export class MannequinRenderer {
         this._bones.clear();
         this._segments.clear();
 
-        const segments = buildSegments(gender);
-        const offsets  = computeBoneOffsets(gender);
+        const segments = await buildSegments(gender);
+        const offsets  = await computeBoneOffsets(gender);
 
         // Create Object3D per bone
         for (const name of this._boneNames()) {

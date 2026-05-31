@@ -57,7 +57,7 @@ try {
 } catch { /* malformed — start fresh */ }
 
 const gender = params.get('gender') ?? initScene?.gender ?? 'F';
-editor.buildMannequin(gender, initScene ?? defaultScene(gender));
+await editor.buildMannequin(gender, initScene ?? defaultScene(gender));
 
 // Wire toolbar
 const btnGender = document.getElementById('btn-gender');
@@ -66,9 +66,9 @@ const btnReset  = document.getElementById('btn-reset');
 const status    = document.getElementById('status');
 
 btnGender.textContent = gender;
-btnGender.addEventListener('click', () => {
+btnGender.addEventListener('click', async () => {
     const next = editor.gender === 'F' ? 'M' : 'F';
-    editor.setGender(next);
+    await editor.setGender(next);
     btnGender.textContent = next;
 });
 btnUndo.addEventListener('click', () => editor.undo());
