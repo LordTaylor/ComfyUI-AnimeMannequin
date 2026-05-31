@@ -116,7 +116,8 @@ export class MannequinRenderer {
         this._dirty = true;
         this._jointColorMode = 'openpose'; // 'openpose' | 'flat'
         this._proportions = defaultProportions();
-        this._skeletonLines = null; // THREE.LineSegments — built after mannequin loads
+        this._skeletonLines    = null; // THREE.Group of CylinderMesh per limb — built after mannequin loads
+        this._skeletonCylinders = null; // flat array matching SKELETON_LIMBS indices
     }
 
     get camera() { return this._camera; }
@@ -479,60 +480,67 @@ export class MannequinRenderer {
     }
 
     _buildSkeletonLines() {
-        // Remove old skeleton lines if any
+        // Dispose old skeleton group if any
         if (this._skeletonLines) {
+            this._skeletonLines.traverse(obj => {
+                obj.geometry?.dispose();
+                obj.material?.dispose();
+            });
             this._scene.remove(this._skeletonLines);
-            this._skeletonLines.geometry.dispose();
-            this._skeletonLines.material.dispose();
         }
 
-        const N = SKELETON_LIMBS.length;
-        const positions = new Float32Array(N * 2 * 3); // 2 verts × 3 floats per limb
-        const colors    = new Float32Array(N * 2 * 3);
+        // WebGL ignores linewidth > 1 on all major platforms.
+        // Use CylinderMesh per limb — thick colored tubes that look like classic OpenPose sticks.
+        // SKELETON_CYLINDER_RADIUS controls visual thickness in scene units (character ~2m tall).
+        const RADIUS = 0.022; // ~2.2cm on a 2m character — clearly visible, not too chunky
 
-        // Pre-fill colors (static per limb)
-        for (let i = 0; i < N; i++) {
-            const hex = SKELETON_LIMBS[i][2];
-            const r = ((hex >> 16) & 0xff) / 255;
-            const g = ((hex >>  8) & 0xff) / 255;
-            const b = (hex         & 0xff) / 255;
-            colors[i * 6 + 0] = r; colors[i * 6 + 1] = g; colors[i * 6 + 2] = b;
-            colors[i * 6 + 3] = r; colors[i * 6 + 4] = g; colors[i * 6 + 5] = b;
+        const group = new THREE.Group();
+        group.renderOrder = 3;
+        group.visible = (this._jointColorMode === 'openpose');
+
+        // Unit cylinder (height=1 along Y) — scaled in _updateSkeletonLines
+        const sharedGeo = new THREE.CylinderGeometry(RADIUS, RADIUS, 1, 8, 1);
+
+        this._skeletonCylinders = [];
+        for (const [, , hex] of SKELETON_LIMBS) {
+            const mat  = new THREE.MeshBasicMaterial({ color: hex, depthTest: false });
+            const mesh = new THREE.Mesh(sharedGeo, mat);
+            mesh.renderOrder = 3;
+            group.add(mesh);
+            this._skeletonCylinders.push(mesh);
         }
 
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geo.setAttribute('color',    new THREE.BufferAttribute(colors,    3));
-
-        const mat = new THREE.LineBasicMaterial({
-            vertexColors: true,
-            linewidth: 2,  // >1 only works on some platforms, but sets intent
-            depthTest: false,
-        });
-        const lines = new THREE.LineSegments(geo, mat);
-        lines.renderOrder = 3;
-        lines.visible = (this._jointColorMode === 'openpose');
-        this._skeletonLines = lines;
-        this._scene.add(lines);
-
-        // Populate initial positions
+        this._skeletonLines = group;
+        this._scene.add(group);
         this._updateSkeletonLines();
     }
 
     _updateSkeletonLines() {
-        if (!this._skeletonLines || !this._bones.size) return;
-        const posAttr = this._skeletonLines.geometry.getAttribute('position');
-        const tmp = new THREE.Vector3();
+        if (!this._skeletonCylinders || !this._bones.size) return;
+        const pA = new THREE.Vector3();
+        const pB = new THREE.Vector3();
+        const up = new THREE.Vector3(0, 1, 0);
+
         for (let i = 0; i < SKELETON_LIMBS.length; i++) {
             const [a, b] = SKELETON_LIMBS[i];
             const boneA = this._bones.get(a);
             const boneB = this._bones.get(b);
-            if (boneA && boneB) {
-                boneA.getWorldPosition(tmp); posAttr.setXYZ(i * 2,     tmp.x, tmp.y, tmp.z);
-                boneB.getWorldPosition(tmp); posAttr.setXYZ(i * 2 + 1, tmp.x, tmp.y, tmp.z);
-            }
+            const cyl = this._skeletonCylinders[i];
+            if (!boneA || !boneB) { cyl.visible = false; continue; }
+
+            boneA.getWorldPosition(pA);
+            boneB.getWorldPosition(pB);
+
+            const dir = new THREE.Vector3().subVectors(pB, pA);
+            const len = dir.length();
+            if (len < 0.001) { cyl.visible = false; continue; }
+
+            cyl.visible = true;
+            // Position at midpoint, scale Y to match limb length, rotate Y→dir
+            cyl.position.addVectors(pA, pB).multiplyScalar(0.5);
+            cyl.scale.set(1, len, 1);
+            cyl.quaternion.setFromUnitVectors(up, dir.normalize());
         }
-        posAttr.needsUpdate = true;
     }
 
     dispose() {
