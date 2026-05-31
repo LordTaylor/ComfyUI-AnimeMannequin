@@ -139,6 +139,9 @@ export class ComfyuiBridge {
                 case 'MakeImages':
                     result = this._renderer.captureImages();
                     break;
+                case 'RandomPose':
+                    result = this._editor.generateRandomPose();
+                    break;
 
                 // ── Discovery / capabilities ─────────────────────────────────
                 case 'GetBoneNames':
@@ -160,6 +163,7 @@ export class ComfyuiBridge {
                             'GetCamera','SetCamera',
                             'SetGender',
                             'MakeImages',
+                            'RandomPose',
                             'GetBoneNames','GetSkeleton','GetCapabilities',
                         ],
                         timeoutHints: { MakeImages: 20000, SetGender: 15000 },

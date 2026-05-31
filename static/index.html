@@ -16,8 +16,9 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 #btn-poses  { background: #333; color: #aaa; }
 #btn-mirror-lr { background: #333; color: #aaa; }
 #btn-mirror-rl { background: #333; color: #aaa; }
-#btn-colors { background: #333; color: #aaa; min-width: 62px; }
+#btn-colors  { background: #333; color: #aaa; min-width: 62px; }
 #btn-colors.active { background: #555; color: #fff; }
+#btn-random  { background: #6a1b9a; color: #fff; }
 #btn-save   { background: #2e7d32; color: #fff; display: none; }
 #btn-dl-pose  { background: #1565c0; color: #fff; display: none; }
 #btn-dl-depth { background: #1565c0; color: #fff; display: none; }
@@ -57,6 +58,7 @@ canvas { display: block; width: 100%; height: 100%; }
   <button id="btn-mirror-lr">L→R</button>
   <button id="btn-mirror-rl">R→L</button>
   <button id="btn-poses">Poses</button>
+  <button id="btn-random">Random</button>
   <button id="btn-colors" class="active">OpenPose</button>
   <span id="status">Loading...</span>
   <button id="btn-save">Close &amp; Save</button>
@@ -144,6 +146,7 @@ btnReset.addEventListener('click', () => editor.resetPose());
 document.getElementById('btn-mirror-lr').addEventListener('click', () => editor.mirrorPose('L_to_R'));
 document.getElementById('btn-mirror-rl').addEventListener('click', () => editor.mirrorPose('R_to_L'));
 document.getElementById('btn-poses').addEventListener('click', () => poseLib.toggle());
+document.getElementById('btn-random').addEventListener('click', () => { editor.generateRandomPose(); });
 
 const btnColors = document.getElementById('btn-colors');
 let colorMode = 'openpose';

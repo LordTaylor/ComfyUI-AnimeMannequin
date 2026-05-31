@@ -275,13 +275,69 @@ export class MannequinRenderer {
         const depthDataUrl = depthCanvas.toDataURL('image/png');
 
         // --- CANNY render ---
-        // Canny is derived from the pose image snapshot (captured before depth pass)
         const cannyDataUrl = sobelCanny(this._renderer.domElement);
 
-        // Restore display size and trigger re-render so viewport isn't stuck at output resolution
-        this._dirty = true;
+        // --- OPENPOSE 2D render ---
+        // Project bone positions to 2D and draw coloured skeleton on black canvas.
+        // Camera is already set up for W×H from the pose render above.
+        const openposeDataUrl = this._captureOpenPose(W, H);
 
-        return { pose: poseDataUrl, depth: depthDataUrl, canny: cannyDataUrl };
+        this._dirty = true;
+        return { pose: poseDataUrl, depth: depthDataUrl, canny: cannyDataUrl, openpose: openposeDataUrl };
+    }
+
+    _captureOpenPose(W, H) {
+        const canvas = document.createElement('canvas');
+        canvas.width = W; canvas.height = H;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, W, H);
+
+        // Project each bone's world position onto the current camera view
+        const screenPos = new Map();
+        const tmp = new THREE.Vector3();
+        for (const [name, bone] of this._bones) {
+            bone.getWorldPosition(tmp);
+            const p = tmp.project(this._camera);
+            screenPos.set(name, { x: (p.x * 0.5 + 0.5) * W, y: (-p.y * 0.5 + 0.5) * H });
+        }
+
+        const dotR  = Math.max(4, Math.round(W / 80));
+        const lineW = Math.max(2, Math.round(W / 130));
+
+        function hexStr(hex) {
+            return `rgb(${(hex >> 16) & 0xff},${(hex >> 8) & 0xff},${hex & 0xff})`;
+        }
+
+        // Draw limb connections using gradient between joint colours
+        ctx.lineWidth = lineW;
+        ctx.lineCap = 'round';
+        for (const [parent, children] of Object.entries(BONE_CHILDREN)) {
+            const pa = screenPos.get(parent);
+            if (!pa) continue;
+            for (const child of children) {
+                const ca = screenPos.get(child);
+                if (!ca) continue;
+                const grad = ctx.createLinearGradient(pa.x, pa.y, ca.x, ca.y);
+                grad.addColorStop(0, hexStr(OPENPOSE_COLORS[parent] ?? 0x888888));
+                grad.addColorStop(1, hexStr(OPENPOSE_COLORS[child]  ?? 0x888888));
+                ctx.strokeStyle = grad;
+                ctx.beginPath();
+                ctx.moveTo(pa.x, pa.y);
+                ctx.lineTo(ca.x, ca.y);
+                ctx.stroke();
+            }
+        }
+
+        // Draw joint dots on top of lines
+        for (const [name, pos] of screenPos) {
+            ctx.fillStyle = hexStr(OPENPOSE_COLORS[name] ?? 0xaaaaaa);
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, dotR, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        return canvas.toDataURL('image/png');
     }
 
     _fitDepthCamera(W, H) {
