@@ -257,6 +257,24 @@ app.registerExtension({
                     if (["pose_file", "depth_file", "canny_file", "openpose_file"].includes(w.name)) w.disabled = true;
                 }
             }, 100);
+
+            // When output width or height changes, recalculate thumbnail height to keep aspect ratio locked
+            this.onWidgetChanged = function (name, value) {
+                if (name !== "width" && name !== "height") return;
+                // Use the incoming `value` for the changed widget; read the other from widgets
+                const outW = name === "width"  ? value : (self.widgets?.find(w => w.name === "width")?.value  ?? 768);
+                const outH = name === "height" ? value : (self.widgets?.find(w => w.name === "height")?.value ?? 1024);
+                if (!outW || !outH) return;
+                // Update thumbnail height directly so it reacts immediately
+                const nodeW = Math.max((self.size?.[0] ?? 256) - 16, 64);
+                const h = Math.round(nodeW * (outH / outW));
+                if (self._thumbnailImg) self._thumbnailImg.style.height = h + "px";
+                // Force LiteGraph to recompute node layout (picks up new computeSize heights)
+                queueMicrotask(() => {
+                    try { self.setSize(self.computeSize()); } catch { /* ignore */ }
+                    app.graph.setDirtyCanvas(true, true);
+                });
+            };
         };
     },
 });
