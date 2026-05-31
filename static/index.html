@@ -12,6 +12,7 @@ button { padding: 5px 12px; border: none; border-radius: 4px; cursor: pointer; f
 #btn-gender { background: #1565c0; color: #fff; min-width: 36px; }
 #btn-undo   { background: #333; color: #aaa; }
 #btn-reset  { background: #333; color: #aaa; }
+#btn-poses  { background: #333; color: #aaa; }
 #btn-save   { background: #2e7d32; color: #fff; display: none; }
 #btn-dl-pose  { background: #1565c0; color: #fff; display: none; }
 #btn-dl-depth { background: #1565c0; color: #fff; display: none; }
@@ -27,6 +28,7 @@ canvas { display: block; width: 100%; height: 100%; }
   <button id="btn-gender">F</button>
   <button id="btn-undo">Undo</button>
   <button id="btn-reset">Reset</button>
+  <button id="btn-poses">Poses</button>
   <span id="status">Loading...</span>
   <button id="btn-save">Close &amp; Save</button>
   <button id="btn-dl-pose">pose.png</button>
@@ -43,6 +45,7 @@ import { MannequinRenderer } from './src/mannequin-renderer.js';
 import { MannequinEditor }   from './src/mannequin-editor.js';
 import { ComfyuiBridge }     from './src/comfyui-bridge.js';
 import { defaultScene, jsonToScene } from './src/mannequin-model.js';
+import { PoseLibrary } from './src/pose-library.js';
 
 const params = new URLSearchParams(location.search);
 const mode   = params.get('mode') ?? 'standalone'; // 'comfyui' | 'standalone'
@@ -50,6 +53,8 @@ const mode   = params.get('mode') ?? 'standalone'; // 'comfyui' | 'standalone'
 const canvas   = document.getElementById('c');
 const renderer = new MannequinRenderer(canvas);
 const editor   = new MannequinEditor(renderer, canvas);
+const poseLib  = new PoseLibrary(editor, renderer);
+poseLib.mount(document.body);
 
 // Restore pose from URL ?scene= param (set by mannequin_node.js)
 let initScene = null;
@@ -75,6 +80,7 @@ btnGender.addEventListener('click', async () => {
 });
 btnUndo.addEventListener('click', () => editor.undo());
 btnReset.addEventListener('click', () => editor.resetPose());
+document.getElementById('btn-poses').addEventListener('click', () => poseLib.toggle());
 
 // ComfyUI mode
 if (mode === 'comfyui') {
