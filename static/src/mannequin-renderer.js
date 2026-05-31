@@ -3,30 +3,38 @@ import { BONE_NAMES, BONE_CHILDREN, defaultScene, jsonToScene, defaultProportion
 import { buildSegments, computeBoneOffsets, WORLD_HEIGHT, OPENPOSE_COLORS, JOINT_COLOR } from './geometry-adapter-gltf.js';
 
 // Forward projection of the bust center as a fraction of growth (halfH*(s-1)).
-// Must stay well below 1.0 to avoid "floating ball" effect at high scale values.
-const BUST_FWD_PROJECTION = 0.7;
+const BUST_FWD_PROJECTION  = 0.55;
+// Constant forward offset applied at ALL scales so bust sits in front of chest (not inside it).
+const BUST_BASE_FWD        = 0.03;
 // Hinge sag fraction (1.0 = full hinge, top edge stays perfectly fixed).
-// Reducing this below 1.0 causes the top to drift upward — 0.9 gives <10% drift at s=2.
-const BUST_SAG_FACTOR = 0.9;
+const BUST_SAG_FACTOR      = 0.9;
+// Lateral (X) spread: subtle — just enough to widen silhouette from front without detaching.
+const BUST_LATERAL_FACTOR  = 0.2;
+// Narrow each breast to keep visible gap between L and R at the centre.
+const BUST_X_SQUEEZE       = 0.80;
 
-// COCO-style limb connections shared by both the 3D skeleton overlay and the openpose capture.
-// Each entry: [boneA, boneB, rgbHex]
+// COCO 18 limb connections — COCO standard (direct shoulder→elbow, hip→knee, etc.)
+// Colors per Openpose-18-keypoints_coco_color_codes_v13 (100 % brightness joint colors).
+// Each entry: [boneA, boneB, lineColorHex]
 const SKELETON_LIMBS = [
-    ['neck',        'head',        0xff0055],
-    ['neck',        'upper_arm_R', 0xff0000],
-    ['neck',        'upper_arm_L', 0xff5500],
-    ['upper_arm_R', 'upper_arm_L', 0xff2200],
-    ['upper_arm_R', 'forearm_R',   0xffaa00],
-    ['forearm_R',   'hand_R',      0xffff00],
-    ['upper_arm_L', 'forearm_L',   0xaaff00],
-    ['forearm_L',   'hand_L',      0x55ff00],
-    ['neck',        'pelvis',      0x00ffaa],
-    ['pelvis',      'thigh_R',     0x00ffcc],
-    ['thigh_R',     'shin_R',      0x00ffff],
-    ['shin_R',      'foot_R',      0x00aaff],
-    ['pelvis',      'thigh_L',     0x0055ff],
-    ['thigh_L',     'shin_L',      0x0000ff],
-    ['shin_L',      'foot_L',      0x5500ff],
+    // Head
+    ['neck',        'head',        0xff0000],  // 1-0
+    // Right arm
+    ['neck',        'shoulder_R',  0xffaa00],  // 1-2
+    ['shoulder_R',  'forearm_R',   0xffff00],  // 2-3  (upper arm drawn as single segment)
+    ['forearm_R',   'hand_R',      0xaaff00],  // 3-4
+    // Left arm
+    ['neck',        'shoulder_L',  0x55ff00],  // 1-5
+    ['shoulder_L',  'forearm_L',   0x00ff00],  // 5-6
+    ['forearm_L',   'hand_L',      0x00ff55],  // 6-7
+    // Right leg (torso line goes neck→hip)
+    ['neck',        'thigh_R',     0x00ffaa],  // 1-8  right torso
+    ['thigh_R',     'shin_R',      0x00ffff],  // 8-9
+    ['shin_R',      'foot_R',      0x00aaff],  // 9-10
+    // Left leg
+    ['neck',        'thigh_L',     0x0055ff],  // 1-11 left torso
+    ['thigh_L',     'shin_L',      0x0000ff],  // 11-12
+    ['shin_L',      'foot_L',      0x5500ff],  // 12-13
 ];
 
 function sobelCanny(sourceCanvas) {
@@ -184,11 +192,11 @@ export class MannequinRenderer {
         // Restore pose from scene data
         if (sceneData) this.applyScene(sceneData);
 
-        // Apply joint color mode after build
-        this._applyJointColors(this._jointColorMode);
-
         // Build skeleton line overlay (openpose viewport visualization)
         this._buildSkeletonLines();
+
+        // Sync joint colors AND visibility with current mode (must run after _buildSkeletonLines)
+        this.setJointColorMode(this._jointColorMode);
 
         // Apply proportions (from sceneData or current stored proportions)
         this.applyProportions(sceneData?.proportions ?? {});
@@ -229,21 +237,22 @@ export class MannequinRenderer {
                 const halfH = obj.userData._bustHalfH ?? 0;
                 const growth = halfH * (s - 1);
 
-                // Non-uniform scale: narrower in X (avoids sphere at high values),
-                // standard height in Y, slightly more forward depth in Z (teardrop shape).
-                // Exponents per VRoid-style anime breast shaping.
+                // Non-uniform scale: narrowed X (gap between L/R), limited Y (no giant sphere),
+                // forward Z projection (anime style).
                 obj.scale.set(
-                    bs.x * Math.pow(s, 0.72),   // narrower — less sphere-like
-                    bs.y * s,                    // standard height
-                    bs.z * Math.pow(s, 1.12)    // slightly more depth (forward projection)
+                    bs.x * BUST_X_SQUEEZE * Math.pow(s, 0.85),  // narrower — visible centre gap
+                    bs.y * Math.pow(s, 0.7),                      // limit height growth
+                    bs.z * Math.pow(s, 1.0)                       // linear depth
                 );
 
-                // Position hinge: forward along the breast's Z-offset direction, mild sag.
+                // Position: constant base-forward so bust sits in front of chest at s=1,
+                // plus scale-proportional forward + sag + subtle lateral spread.
                 const fwdSign = Math.abs(bp.z) > 0.001 ? Math.sign(bp.z) : -1;
+                const latSign = Math.abs(bp.x) > 0.001 ? Math.sign(bp.x) : 1;
                 obj.position.set(
-                    bp.x,
+                    bp.x + latSign * growth * BUST_LATERAL_FACTOR,
                     bp.y - growth * BUST_SAG_FACTOR,
-                    bp.z + fwdSign * growth * BUST_FWD_PROJECTION
+                    bp.z + fwdSign * (BUST_BASE_FWD + growth * BUST_FWD_PROJECTION)
                 );
             } else {
                 // All other extra nodes (ears, eyes, nose): scale offset proportionally
@@ -345,20 +354,24 @@ export class MannequinRenderer {
         this._scene.traverse(o => { if (o.userData.isJoint && !o.userData.isHitTarget && o.visible) jointMeshes.push(o); });
         const setJointsVisible = v => jointMeshes.forEach(j => j.visible = v);
 
-        // Grid/skeleton lines never appear in captures
-        this._grid.visible = false;
-        if (this._skeletonLines) this._skeletonLines.visible = false;
+        // Hide editor gizmos (TransformControls rotation rings, etc.) — must not appear in output
+        const gizmos = [];
+        this._scene.traverse(o => { if (o.userData.isGizmo && o.visible) { gizmos.push(o); o.visible = false; } });
 
+        this._grid.visible = false;
         this._renderer.setSize(W, H);
         this._camera.aspect = W / H;
         this._camera.updateProjectionMatrix();
 
-        // --- POSE render (joints visible — gives user the reference image) ---
-        this._renderer.render(this._scene, this._camera);
-        const poseDataUrl = this._renderer.domElement.toDataURL('image/png');
-
-        // --- DEPTH render (joints hidden — they'd register as near-surface noise) ---
+        // --- 3D REFERENCE render: body + COCO skeleton lines, no joint balls ---
+        // Shown as the "openpose" output so users can see the pose on the body.
         setJointsVisible(false);
+        if (this._skeletonLines) this._skeletonLines.visible = true;
+        this._renderer.render(this._scene, this._camera);
+        const refDataUrl = this._renderer.domElement.toDataURL('image/png');
+        if (this._skeletonLines) this._skeletonLines.visible = false;
+
+        // --- DEPTH render ---
         this._fitDepthCamera(W, H);
         this._depthTarget.setSize(W, H);
 
@@ -380,15 +393,11 @@ export class MannequinRenderer {
             this._scene.overrideMaterial = null;
             this._scene.background = savedBackground;
         }
-        setJointsVisible(true);
-
-        // MeshDepthMaterial: near=0 (dark), far=255 (bright), background=0 (dark).
-        // ControlNet wants near=bright, far=dark. Steps:
-        //   1. Normalize geometry pixels to [DEPTH_MIN, 255] — never to 0 so every character
-        //      pixel is clearly distinguishable from the black background.
-        //      DEPTH_MIN=30: farthest body part = dark-grey, NOT black like background.
-        //   2. Invert within that range: near=255 (white), far=DEPTH_MIN.
-        //   3. Background (v===0) → 0 (true black). Flip Y (WebGL bottom-up).
+        // MeshDepthMaterial (BasicDepthPacking): near=255 (bright), far=0 (dark), background=0 (dark).
+        // This already matches ControlNet convention (near=bright). Steps:
+        //   1. Stretch geometry pixels from [minDepth, maxDepth] → [DEPTH_MIN, 255].
+        //      DEPTH_MIN=30: farthest character pixel = dark-grey, NOT black like background.
+        //   2. Background (v===0) → 0 (true black). Flip Y (WebGL bottom-up).
         const DEPTH_MIN = 30; // farthest character pixel — dark-grey, never background-black
         let minDepth = 255, maxDepth = 0;
         for (let i = 0; i < W * H; i++) {
@@ -406,8 +415,9 @@ export class MannequinRenderer {
                 const srcIdx = ((H - 1 - row) * W + col) * 4;
                 const dstIdx = (row * W + col) * 4;
                 const v = buf[srcIdx];
-                // Background → true black (0). Geometry → [DEPTH_MIN, 255] inverted range.
-                const norm = v === 0 ? 0 : DEPTH_MIN + Math.round((maxDepth - v) / depthRange * (255 - DEPTH_MIN));
+                // Background → true black (0). Geometry → [DEPTH_MIN, 255] stretched range.
+                // BasicDepthPacking: near=bright → keep direction, just stretch to [DEPTH_MIN,255].
+                const norm = v === 0 ? 0 : DEPTH_MIN + Math.round((v - minDepth) / depthRange * (255 - DEPTH_MIN));
                 imgData.data[dstIdx]     = norm;
                 imgData.data[dstIdx + 1] = norm;
                 imgData.data[dstIdx + 2] = norm;
@@ -428,14 +438,19 @@ export class MannequinRenderer {
             setJointsVisible(true);
         }
 
-        // --- OPENPOSE 2D render ---
-        const openposeDataUrl = this._captureOpenPose(W, H);
+        // --- POSE = 2D OpenPose skeleton (black bg + COCO colored lines + dots) ---
+        // This is what goes into the OpenPose ControlNet.
+        const poseDataUrl = this._captureOpenPose(W, H);
 
-        // Restore grid and skeleton overlay for viewport
+        // Restore gizmos, grid and skeleton overlay for viewport
+        gizmos.forEach(o => o.visible = true);
+        setJointsVisible(true);
         this._grid.visible = true;
         if (this._skeletonLines) this._skeletonLines.visible = (this._jointColorMode === 'openpose');
         this._dirty = true;
-        return { pose: poseDataUrl, depth: depthDataUrl, canny: cannyDataUrl, openpose: openposeDataUrl };
+        // pose   = 2D OpenPose skeleton on black bg   → for OpenPose ControlNet
+        // openpose = 3D body + skeleton overlay        → visual reference
+        return { pose: poseDataUrl, depth: depthDataUrl, canny: cannyDataUrl, openpose: refDataUrl };
     }
 
     _captureOpenPose(W, H) {
@@ -473,15 +488,16 @@ export class MannequinRenderer {
             ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
         }
 
-        // Draw keypoint dots on top
+        // Draw keypoint dots with correct per-bone COCO-18 colors (not the line color)
         const drawn = new Set();
-        for (const [a, b, col] of SKELETON_LIMBS) {
-            for (const [k, c] of [[a, col],[b, col]]) {
+        for (const [a, b] of SKELETON_LIMBS) {
+            for (const k of [a, b]) {
                 if (drawn.has(k)) continue;
                 drawn.add(k);
                 const p = sp.get(k);
                 if (!p) continue;
-                ctx.fillStyle = rgb(c);
+                const dotCol = OPENPOSE_COLORS[k] ?? 0xffffff;
+                ctx.fillStyle = rgb(dotCol);
                 ctx.beginPath(); ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2); ctx.fill();
             }
         }

@@ -11,30 +11,30 @@ const SELECT_COLOR  = 0x4fc3f7;
 const JOINT_RADIUS = 0.055; // visible sphere
 const HIT_RADIUS   = 0.12;  // invisible larger sphere for easier click detection
 
-// OpenPose ControlNet color scheme — matches standard keypoint visualization.
-// Colors follow the rainbow gradient: head=red, neck=orange, R-arm=yellow-green,
-// L-arm=green, R-leg=teal-cyan, L-leg=blue-purple.
+// OpenPose COCO-18 joint colors — Openpose-18-keypoints_coco_color_codes_v13 (100 % brightness).
+// Bones without a direct COCO keypoint use neutral greys.
 export const OPENPOSE_COLORS = {
-    head:        0xff0000,
-    neck:        0xff5500,
+    head:        0xff0000,  // COCO 0  nose
+    neck:        0xff5500,  // COCO 1  neck
+    shoulder_R:  0xffaa00,  // COCO 2  right shoulder
+    upper_arm_R: 0xffcc00,  // between COCO 2-3
+    forearm_R:   0xffff00,  // COCO 3  right elbow
+    hand_R:      0xaaff00,  // COCO 4  right wrist
+    shoulder_L:  0x55ff00,  // COCO 5  left shoulder
+    upper_arm_L: 0x00cc00,  // between COCO 5-6
+    forearm_L:   0x00ff00,  // COCO 6  left elbow
+    hand_L:      0x00ff55,  // COCO 7  left wrist
+    thigh_R:     0x00ffaa,  // COCO 8  right hip
+    shin_R:      0x00ffff,  // COCO 9  right knee
+    foot_R:      0x00aaff,  // COCO 10 right ankle
+    thigh_L:     0x0055ff,  // COCO 11 left hip
+    shin_L:      0x0000ff,  // COCO 12 left knee
+    foot_L:      0x5500ff,  // COCO 13 left ankle
+    // Non-COCO bones — neutral
+    pelvis:      0x00ffcc,
     chest:       0xffffff,
     spine:       0xdddddd,
     torso:       0xaaaaaa,
-    shoulder_R:  0xffaa00,
-    upper_arm_R: 0xffff00,
-    forearm_R:   0xaaff00,
-    hand_R:      0x55ff00,
-    shoulder_L:  0x00ff00,
-    upper_arm_L: 0x00ff55,
-    forearm_L:   0x00ffaa,
-    hand_L:      0x00ffdd,
-    pelvis:      0x00cccc,
-    thigh_R:     0x00ffcc,
-    shin_R:      0x00ffff,
-    foot_R:      0x00aaff,
-    thigh_L:     0x0055ff,
-    shin_L:      0x0000ff,
-    foot_L:      0x5500ff,
 };
 
 // GLB sub-meshes that attach to a bone without their own FK pivot.

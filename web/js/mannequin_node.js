@@ -212,7 +212,7 @@ app.registerExtension({
             const btn = document.createElement("button");
             btn.textContent = "Open Mannequin Editor";
             btn.style.cssText = [
-                "width:calc(100% - 16px)", "margin:6px 8px 2px 8px",
+                "margin:6px 8px 2px 8px",
                 "padding:8px 12px", "background:#1565c0", "color:#fff",
                 "border:none", "border-radius:6px", "cursor:pointer",
                 "font-size:13px", "font-weight:bold", "display:block",
@@ -222,14 +222,18 @@ app.registerExtension({
             btn.onclick = e => { e.stopPropagation(); openMannequinModal(self); };
             this.addDOMWidget("open_editor_btn", "btn", btn, {
                 getValue() { return ""; }, setValue() {},
-                // 240 = min node width so button never overflows
-                computeSize() { return [240, 46]; }, serialize: false,
+                computeSize(width) {
+                    const nw = Math.max((width ?? self.size?.[0] ?? 256) - 16, 64);
+                    btn.style.width = nw + "px";
+                    return [0, 46];
+                },
+                serialize: false,
             });
 
             // Thumbnail preview — sized to match output aspect ratio (w × h widgets)
             const img = document.createElement("img");
             img.style.cssText = [
-                "width:calc(100% - 16px)", "margin:2px 8px 4px 8px",
+                "margin:2px 8px 4px 8px",
                 "border-radius:4px", "display:block",
                 "background:#111", "object-fit:cover",
                 "box-sizing:border-box",
@@ -238,14 +242,14 @@ app.registerExtension({
             this._thumbnailImg = img;
             this.addDOMWidget("thumbnail", "thumbnail", img, {
                 getValue() { return ""; }, setValue() {},
-                // height = available_width * (outputH / outputW) so thumbnail matches
-                // the actual render resolution aspect ratio
+                // width + height set explicitly — calc(100%) is broken in LiteGraph DOM widgets
                 computeSize(width) {
-                    const nodeW = Math.max((width ?? self.size?.[0] ?? 256) - 16, 64);
-                    const outW  = self.widgets?.find(w => w.name === "width")?.value  ?? 768;
-                    const outH  = self.widgets?.find(w => w.name === "height")?.value ?? 1024;
-                    const h     = Math.round(nodeW * (outH / outW));
-                    img.style.height = h + "px";
+                    const nw   = Math.max((width ?? self.size?.[0] ?? 256) - 16, 64);
+                    const outW = self.widgets?.find(w => w.name === "width")?.value  ?? 768;
+                    const outH = self.widgets?.find(w => w.name === "height")?.value ?? 1024;
+                    const h    = Math.round(nw * (outH / outW));
+                    img.style.width  = nw + "px";
+                    img.style.height = h  + "px";
                     return [0, h + 6];  // +6 for top/bottom margin
                 },
                 serialize: false,
@@ -257,6 +261,17 @@ app.registerExtension({
                     if (["pose_file", "depth_file", "canny_file", "openpose_file"].includes(w.name)) w.disabled = true;
                 }
             }, 100);
+
+            // When the node itself is resized, update explicit pixel widths on DOM widgets.
+            // Without this, btn and img stay at the width from the last computeSize() call.
+            this.onResize = function (size) {
+                const nw = Math.max((size?.[0] ?? 256) - 16, 64);
+                btn.style.width = nw + "px";
+                const outW = self.widgets?.find(w => w.name === "width")?.value  ?? 768;
+                const outH = self.widgets?.find(w => w.name === "height")?.value ?? 1024;
+                img.style.width  = nw + "px";
+                img.style.height = Math.round(nw * (outH / outW)) + "px";
+            };
 
             // When output width or height changes, recalculate thumbnail height to keep aspect ratio locked
             this.onWidgetChanged = function (name, value) {

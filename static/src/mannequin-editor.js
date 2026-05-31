@@ -29,6 +29,7 @@ export class MannequinEditor {
         this._transform = new TransformControls(renderer.camera, canvas);
         this._transform.setMode('rotate');
         this._transform.setSpace('local');
+        this._transform.userData.isGizmo = true; // hide during image capture
         renderer.scene.add(this._transform);
 
         this._transform.addEventListener('dragging-changed', (e) => {
