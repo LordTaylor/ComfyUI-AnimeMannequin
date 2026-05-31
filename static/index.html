@@ -57,21 +57,21 @@ canvas { display: block; width: 100%; height: 100%; }
 <body>
 <div id="toolbar">
   <h1>Anime Mannequin</h1>
-  <button id="btn-gender">F</button>
-  <button id="btn-undo">Undo</button>
-  <button id="btn-reset">Reset</button>
-  <button id="btn-mirror-lr">L→R</button>
-  <button id="btn-mirror-rl">R→L</button>
-  <button id="btn-poses">Poses</button>
-  <button id="btn-random">Random</button>
-  <button id="btn-random-mode" title="Safe: anatomical limits  |  Wild: anything goes">🔒</button>
-  <button id="btn-props">Props</button>
-  <button id="btn-colors" class="active">OpenPose</button>
+  <button id="btn-gender" title="Toggle gender (F / M)">F</button>
+  <button id="btn-undo" title="Undo last rotation (Ctrl+Z)">Undo</button>
+  <button id="btn-reset" title="Reset all bones to default pose">Reset</button>
+  <button id="btn-mirror-lr" title="Mirror pose: copy left side → right side">L→R</button>
+  <button id="btn-mirror-rl" title="Mirror pose: copy right side → left side">R→L</button>
+  <button id="btn-poses" title="Open saved pose library">Poses</button>
+  <button id="btn-random" title="Generate random pose">Random</button>
+  <button id="btn-random-mode" title="Safe: anatomical limits  |  click for Wild">🔒</button>
+  <button id="btn-props" title="Body proportions: head, bust, hips, waist, legs, arms">Props</button>
+  <button id="btn-colors" class="active" title="Toggle joint color mode: OpenPose colors / flat grey">OpenPose</button>
   <span id="status">Loading...</span>
-  <button id="btn-save">Close &amp; Save</button>
-  <button id="btn-dl-pose">pose.png</button>
-  <button id="btn-dl-depth">depth.png</button>
-  <button id="btn-dl-canny">canny.png</button>
+  <button id="btn-save" title="Capture images and save to ComfyUI node">Close &amp; Save</button>
+  <button id="btn-dl-pose" title="Download pose render as PNG">pose.png</button>
+  <button id="btn-dl-depth" title="Download depth map as PNG">depth.png</button>
+  <button id="btn-dl-canny" title="Download Canny edge map as PNG">canny.png</button>
 </div>
 <div id="canvas-wrap">
   <canvas id="c"></canvas>
