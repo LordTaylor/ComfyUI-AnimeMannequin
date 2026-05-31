@@ -137,20 +137,27 @@ import { defaultScene, jsonToScene } from './src/mannequin-model.js';
 import { PoseLibrary } from './src/pose-library.js';
 import { ProportionsPanel } from './src/proportions-panel.js';
 import { BustDebugPanel } from './src/bust-debug-panel.js';
+import { AppStore, defaultState } from './src/app-store.js';
+import { CommandHistory } from './src/commands.js';
 
 const params = new URLSearchParams(location.search);
 const mode   = params.get('mode') ?? 'standalone';
 
+// ── Store + History (Phase 3-5 architecture) ───────────────────────────────────
+const gender = params.get('gender') ?? 'F';
+const store   = new AppStore(defaultState(gender));
+const history = new CommandHistory(20);
+
 const canvas   = document.getElementById('c');
-const renderer = new MannequinRenderer(canvas);
-const editor   = new MannequinEditor(renderer, canvas);
+const renderer = new MannequinRenderer(canvas, store);  // Phase 3: renderer subscribes to store
+const editor   = new MannequinEditor(renderer, canvas, store);  // Phase 4
 const poseLib  = new PoseLibrary(editor, renderer);
 poseLib.mount(document.body);
 
-const propsPanel = new ProportionsPanel(renderer);
+const propsPanel = new ProportionsPanel(store, history);  // Phase 5
 propsPanel.mount(document.body);
 
-const bustDbg = new BustDebugPanel(renderer);
+const bustDbg = new BustDebugPanel(store, history);       // Phase 5
 bustDbg.mount(document.body);
 document.getElementById('btn-bust-dbg').addEventListener('click', () => bustDbg.toggle());
 
@@ -165,11 +172,11 @@ try {
     if (sceneParam) initScene = jsonToScene(decodeURIComponent(sceneParam));
 } catch { /* malformed */ }
 
-const gender = params.get('gender') ?? initScene?.gender ?? 'F';
 showLoading(`Loading ${gender === 'F' ? 'female' : 'male'} model…`);
 try {
+    // Sync store proportions from scene if present
+    if (initScene?.proportions) store.setProportions(initScene.proportions);
     await editor.buildMannequin(gender, initScene ?? defaultScene(gender));
-    if (initScene?.proportions) propsPanel.setProportions(initScene.proportions);
     hideLoading();
 } catch (err) {
     loadingMsg.textContent = `Failed to load model — ${err.message}`;
@@ -188,7 +195,7 @@ btnGender.addEventListener('click', async () => {
     try {
         await editor.setGender(next);
         btnGender.textContent = next;
-        propsPanel.setGender(next);
+        // ProportionsPanel syncs bust visibility via store subscription
     } finally {
         btnGender.disabled = false;
         hideLoading();
@@ -220,12 +227,12 @@ btnProps.addEventListener('click', () => {
 });
 
 const btnColors = document.getElementById('btn-colors');
-let colorMode = 'openpose';
 btnColors.addEventListener('click', () => {
-    colorMode = colorMode === 'openpose' ? 'flat' : 'openpose';
-    btnColors.textContent = colorMode === 'openpose' ? 'OpenPose' : 'Flat';
-    btnColors.classList.toggle('active', colorMode === 'openpose');
-    renderer.setJointColorMode(colorMode);
+    const current = store.getState().jointColorMode;
+    const next    = current === 'openpose' ? 'flat' : 'openpose';
+    store.setState({ jointColorMode: next });  // renderer reacts via subscription
+    btnColors.textContent = next === 'openpose' ? 'OpenPose' : 'Flat';
+    btnColors.classList.toggle('active', next === 'openpose');
 });
 
 // ── ComfyUI mode ─────────────────────────────────────────────────────────────
