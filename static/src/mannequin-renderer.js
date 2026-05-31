@@ -187,14 +187,14 @@ export class MannequinRenderer {
             if (!bp) return;
             if (pg === 'bust') {
                 // Hinge model: top edge of breast stays attached to chest at all sizes.
-                // halfH ≈ 65% of forward depth (empirical for stylised female GLB).
-                // new_top = new_center_y + halfH*s  must equal  bp.y + halfH  →
-                //   new_center_y = bp.y - halfH*(s-1)
-                const halfH = Math.abs(bp.z) * 0.65;
+                // halfH from actual geometry bounding box (set in adapter), fallback to 0.
+                // new_top = bp.y + halfH = constant → new_center_y = bp.y - halfH*(s-1)
+                const halfH = obj.userData._bustHalfH ?? 0;
+                const fwdBase = Math.abs(bp.z);
                 obj.position.set(
-                    bp.x,                                       // lateral: pivot stays put, mesh widens from centre
-                    bp.y - halfH * (s - 1),                    // top fixed, bottom sags
-                    bp.z + Math.abs(bp.z) * 0.25 * (s - 1)    // forward projection grows with size
+                    bp.x,                                    // lateral: pivot stays centred
+                    bp.y - halfH * (s - 1),                  // top fixed, bottom sags
+                    bp.z + fwdBase * 0.35 * (s - 1)         // forward projection grows with size
                 );
             } else {
                 // All other extra nodes (ears, eyes, nose): scale offset proportionally

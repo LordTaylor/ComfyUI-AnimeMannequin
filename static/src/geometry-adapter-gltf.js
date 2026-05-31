@@ -305,7 +305,8 @@ export async function buildSegments(gender) {
             extraNode.getWorldScale(extraWorldS);
 
             for (const meshNode of meshes) {
-                const extraSeg = new THREE.Mesh(meshNode.geometry.clone(), makeToonMat(SEGMENT_COLOR));
+                const geom = meshNode.geometry.clone();
+                const extraSeg = new THREE.Mesh(geom, makeToonMat(SEGMENT_COLOR));
                 extraSeg.userData.boneName        = boneName;
                 extraSeg.userData.proportionGroup = extraPG;
                 extraSeg.position.copy(relPos);
@@ -313,6 +314,12 @@ export async function buildSegments(gender) {
                 extraSeg.scale.set(extraWorldS.x * charScale, extraWorldS.y * charScale, extraWorldS.z * charScale);
                 extraSeg.userData._baseScale    = { x: extraSeg.scale.x, y: extraSeg.scale.y, z: extraSeg.scale.z };
                 extraSeg.userData._basePosition = { x: relPos.x, y: relPos.y, z: relPos.z };
+                if (extraPG === 'bust') {
+                    // Compute real half-height in bone-group space so hinge math uses actual mesh bounds.
+                    geom.computeBoundingBox();
+                    const bbox = geom.boundingBox;
+                    extraSeg.userData._bustHalfH = ((bbox.max.y - bbox.min.y) / 2) * extraWorldS.y * charScale;
+                }
                 group.add(extraSeg);
             }
         }
