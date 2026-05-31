@@ -282,12 +282,9 @@ export async function buildSegments(gender) {
             const extraNode = nodeMap.get(extraName);
             if (!extraNode) continue;
 
-            // Find all mesh descendants of the extra node (handles eye→eyelid hierarchy)
+            // Find all mesh descendants (traverse visits extraNode itself, then children)
             const meshes = [];
             extraNode.traverse(c => { if (c.isMesh) meshes.push(c); });
-            if (!meshes.length) {
-                if (extraNode.isMesh) meshes.push(extraNode);
-            }
 
             // Relative position: extra world pos minus parent bone world pos (both in GLB space), scaled
             const parentGlbNode = nodeMap.get(glbNodeName);

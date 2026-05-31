@@ -6,8 +6,8 @@
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: #1a1a1a; color: #eee; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
-#toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #2a2a2a; border-bottom: 1px solid #444; flex-shrink: 0; }
-#toolbar h1 { font-size: 13px; font-weight: bold; flex: 1; color: #fff; }
+#toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #2a2a2a; border-bottom: 1px solid #444; flex-shrink: 0; flex-wrap: wrap; }
+#toolbar h1 { font-size: 13px; font-weight: bold; flex: 1; color: #fff; min-width: 80px; }
 button { padding: 5px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 #btn-gender { background: #1565c0; color: #fff; min-width: 36px; }
@@ -22,11 +22,13 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 #btn-random-mode { background: #333; color: #aaa; padding: 5px 8px; font-size: 14px; }
 #btn-random-mode.wild { background: #bf360c; color: #fff; }
 #btn-props { background: #333; color: #aaa; }
-#btn-save   { background: #2e7d32; color: #fff; display: none; }
+#btn-props.active { background: #555; color: #fff; }
+#btn-save   { background: #2e7d32; color: #fff; display: none; min-width: 100px; }
+#btn-save.saving { background: #1b5e20; }
 #btn-dl-pose  { background: #1565c0; color: #fff; display: none; }
 #btn-dl-depth { background: #1565c0; color: #fff; display: none; }
 #btn-dl-canny { background: #1565c0; color: #fff; display: none; }
-#status { font-size: 11px; color: #888; padding: 0 8px; }
+#status { font-size: 11px; color: #888; padding: 0 4px; white-space: nowrap; }
 #canvas-wrap { flex: 1; position: relative; overflow: hidden; }
 canvas { display: block; width: 100%; height: 100%; }
 
@@ -133,8 +135,6 @@ try {
 
 // Wire toolbar
 const btnGender = document.getElementById('btn-gender');
-const btnUndo   = document.getElementById('btn-undo');
-const btnReset  = document.getElementById('btn-reset');
 const status    = document.getElementById('status');
 
 btnGender.textContent = gender;
@@ -152,11 +152,12 @@ btnGender.addEventListener('click', async () => {
         hideLoading();
     }
 });
-btnUndo.addEventListener('click', () => editor.undo());
-btnReset.addEventListener('click', () => editor.resetPose());
+document.getElementById('btn-undo').addEventListener('click', () => editor.undo());
+document.getElementById('btn-reset').addEventListener('click', () => editor.resetPose());
 document.getElementById('btn-mirror-lr').addEventListener('click', () => editor.mirrorPose('L_to_R'));
 document.getElementById('btn-mirror-rl').addEventListener('click', () => editor.mirrorPose('R_to_L'));
 document.getElementById('btn-poses').addEventListener('click', () => poseLib.toggle());
+
 let randomMode = 'safe';
 const btnRandomMode = document.getElementById('btn-random-mode');
 btnRandomMode.addEventListener('click', () => {
@@ -168,7 +169,12 @@ btnRandomMode.addEventListener('click', () => {
         : 'Wild: anything goes  |  click for Safe';
 });
 document.getElementById('btn-random').addEventListener('click', () => editor.generateRandomPose(randomMode));
-document.getElementById('btn-props').addEventListener('click', () => propsPanel.toggle());
+
+const btnProps = document.getElementById('btn-props');
+btnProps.addEventListener('click', () => {
+    propsPanel.toggle();
+    btnProps.classList.toggle('active', propsPanel.isVisible());
+});
 
 const btnColors = document.getElementById('btn-colors');
 let colorMode = 'openpose';
@@ -181,36 +187,56 @@ btnColors.addEventListener('click', () => {
 
 // ComfyUI mode
 if (mode === 'comfyui') {
-    const bridge = new ComfyuiBridge(editor, renderer);
-    document.getElementById('btn-save').style.display = 'inline-block';
-    document.getElementById('btn-save').addEventListener('click', async () => {
-        status.textContent = 'Capturing...';
-        window.parent.postMessage({ cmd: 'mannequin', type: 'event', method: 'UserSaved' }, window.location.origin);
+    new ComfyuiBridge(editor, renderer);
+    const btnSave = document.getElementById('btn-save');
+    btnSave.style.display = 'inline-block';
+    btnSave.addEventListener('click', () => {
+        if (btnSave.disabled) return;
+        btnSave.disabled = true;
+        btnSave.textContent = 'Saving…';
+        btnSave.classList.add('saving');
+        status.textContent = 'Uploading…';
+        window.parent.postMessage(
+            { cmd: 'mannequin', type: 'event', method: 'UserSaved' },
+            window.location.origin
+        );
+        // Re-enable after 30 s in case parent never closes the modal (error recovery)
+        setTimeout(() => {
+            btnSave.disabled = false;
+            btnSave.textContent = 'Close & Save';
+            btnSave.classList.remove('saving');
+            if (status.textContent === 'Uploading…') status.textContent = 'Ready';
+        }, 30000);
     });
 }
 
 // Standalone mode
 if (mode === 'standalone') {
-    document.getElementById('btn-dl-pose').style.display  = 'inline-block';
-    document.getElementById('btn-dl-depth').style.display = 'inline-block';
-
     function download(dataUrl, name) {
         const a = document.createElement('a');
         a.href = dataUrl; a.download = name; a.click();
     }
-    document.getElementById('btn-dl-pose').addEventListener('click', async () => {
-        const { pose } = await renderer.captureImages();
-        download(pose, 'pose.png');
-    });
-    document.getElementById('btn-dl-depth').addEventListener('click', async () => {
-        const { depth } = await renderer.captureImages();
-        download(depth, 'depth.png');
-    });
-    document.getElementById('btn-dl-canny').style.display  = 'inline-block';
-    document.getElementById('btn-dl-canny').addEventListener('click', async () => {
-        const { canny } = await renderer.captureImages();
-        download(canny, 'canny.png');
-    });
+    function withFeedback(btn, label, fn) {
+        btn.addEventListener('click', async () => {
+            if (btn.disabled) return;
+            btn.disabled = true;
+            const orig = btn.textContent;
+            btn.textContent = '…';
+            try { await fn(); } finally {
+                btn.disabled = false;
+                btn.textContent = orig;
+            }
+        });
+    }
+    const dlPose  = document.getElementById('btn-dl-pose');
+    const dlDepth = document.getElementById('btn-dl-depth');
+    const dlCanny = document.getElementById('btn-dl-canny');
+    dlPose.style.display  = 'inline-block';
+    dlDepth.style.display = 'inline-block';
+    dlCanny.style.display = 'inline-block';
+    withFeedback(dlPose,  'pose.png',  async () => { const { pose }  = renderer.captureImages(); download(pose,  'pose.png');  });
+    withFeedback(dlDepth, 'depth.png', async () => { const { depth } = renderer.captureImages(); download(depth, 'depth.png'); });
+    withFeedback(dlCanny, 'canny.png', async () => { const { canny } = renderer.captureImages(); download(canny, 'canny.png'); });
 }
 
 status.textContent = 'Ready';

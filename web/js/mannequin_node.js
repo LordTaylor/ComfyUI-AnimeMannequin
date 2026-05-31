@@ -132,9 +132,11 @@ function openMannequinModal(node) {
     async function onMessage(e) {
         if (e.origin !== window.location.origin) return;
         const d = e.data;
-        if (d?.cmd !== "mannequin" || d?.method !== "UserSaved") return;
+        if (!d || d.cmd !== "mannequin") return;
+        if (d.method !== "UserSaved") return;
         if (closing) return;
         closing = true;
+        console.log("[AnimeMannequin] UserSaved received, capturing…");
 
         try {
             setStatus("Capturing...", "#FFA500");
@@ -179,8 +181,9 @@ function openMannequinModal(node) {
     window.addEventListener("message", onMessage);
 
     iframe.onload = async () => {
+        console.log("[AnimeMannequin] iframe loaded, waiting for bridge…");
         const ready = await waitForEditorReady(iframe.contentWindow);
-        if (!ready) { setStatus("Editor failed to load", "#f44"); return; }
+        if (!ready) { setStatus("Editor failed to load", "#f44"); console.error("[AnimeMannequin] bridge never responded"); return; }
         const sized = await applyOutputSize(iframe.contentWindow, w, h);
         setStatus(
             sized ? `Ready - ${w}x${h} - pose then Close & Save` : `Ready (size ${w}x${h} may not have applied)`,

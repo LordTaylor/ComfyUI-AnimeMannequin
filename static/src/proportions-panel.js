@@ -29,6 +29,8 @@ export class ProportionsPanel {
         if (this._panel) this._panel.style.display = this._visible ? 'flex' : 'none';
     }
 
+    isVisible() { return this._visible; }
+
     getProportions() { return { ...this._props }; }
 
     setProportions(props) {

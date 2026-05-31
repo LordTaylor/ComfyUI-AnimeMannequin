@@ -220,7 +220,7 @@ export class MannequinEditor {
             const boneName = hit.userData.boneName;
             // Resolve the visible joint sphere for visual highlight
             let sphere = null;
-            const boneGroup = hit.userData.isJoint ? hit.parent : hit.parent;
+            const boneGroup = hit.parent;
             if (boneGroup) {
                 sphere = boneGroup.children.find(c => c.userData.isJoint && !c.userData.isHitTarget) ?? null;
             }
