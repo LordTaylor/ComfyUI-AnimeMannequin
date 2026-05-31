@@ -110,14 +110,15 @@ export async function buildSegments(gender) {
         if (glbNodeName) {
             const glbNode = nodeMap.get(glbNodeName);
             if (glbNode && glbNode.isMesh) {
-                const seg = glbNode.clone();
-                seg.geometry = glbNode.geometry.clone(); // deep clone — prevent shared dispose
-                seg.material = makeToonMat(SEGMENT_COLOR);
+                // Use new Mesh directly to avoid the intermediate geometry leak from clone()
+                const seg = new THREE.Mesh(glbNode.geometry.clone(), makeToonMat(SEGMENT_COLOR));
                 seg.userData.boneName = boneName;
-                // Reset local transform — position comes from our bone hierarchy
+                // Reset local transform — position/scale come from our bone hierarchy.
+                // Do NOT apply WORLD_HEIGHT scale here: bone offsets are already
+                // WORLD_HEIGHT-scaled, so the geometry must remain at GLB unit scale.
                 seg.position.set(0, 0, 0);
                 seg.rotation.set(0, 0, 0);
-                seg.scale.setScalar(WORLD_HEIGHT);
+                seg.scale.set(1, 1, 1);
                 group.add(seg);
             }
         }

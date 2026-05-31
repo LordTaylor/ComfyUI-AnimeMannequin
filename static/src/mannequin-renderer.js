@@ -214,17 +214,18 @@ export class MannequinRenderer {
         this._fitDepthCamera(W, H);
         this._depthTarget.setSize(W, H);
 
-        // Swap materials to depth
-        this._scene.overrideMaterial = this._depthMat;
-        this._renderer.setSize(W, H);
-        this._renderer.setRenderTarget(this._depthTarget);
-        this._renderer.render(this._scene, this._depthCamera);
-        this._renderer.setRenderTarget(null);
-        this._scene.overrideMaterial = null;
-
-        // Read depth pixels into canvas
+        // Swap materials to depth — always restore in finally to avoid permanent black screen
         const buf = new Uint8Array(W * H * 4);
-        this._renderer.readRenderTargetPixels(this._depthTarget, 0, 0, W, H, buf);
+        try {
+            this._scene.overrideMaterial = this._depthMat;
+            this._renderer.setSize(W, H);
+            this._renderer.setRenderTarget(this._depthTarget);
+            this._renderer.render(this._scene, this._depthCamera);
+            this._renderer.readRenderTargetPixels(this._depthTarget, 0, 0, W, H, buf);
+        } finally {
+            this._renderer.setRenderTarget(null);
+            this._scene.overrideMaterial = null;
+        }
 
         // Invert: MeshDepthMaterial encodes far=black, we want near=white
         // Red channel = depth value, already 0(near)=255-ish, 1(far)=0
@@ -248,8 +249,11 @@ export class MannequinRenderer {
         const depthDataUrl = depthCanvas.toDataURL('image/png');
 
         // --- CANNY render ---
-        // Canny is derived from the pose canvas (which still has the pose render on it)
+        // Canny is derived from the pose image snapshot (captured before depth pass)
         const cannyDataUrl = sobelCanny(this._renderer.domElement);
+
+        // Restore display size and trigger re-render so viewport isn't stuck at output resolution
+        this._dirty = true;
 
         return { pose: poseDataUrl, depth: depthDataUrl, canny: cannyDataUrl };
     }
@@ -268,8 +272,15 @@ export class MannequinRenderer {
     }
 
     dispose() {
-        this._renderer.dispose();
+        this._scene.traverse(obj => {
+            obj.geometry?.dispose();
+            obj.material?.dispose();
+        });
+        this._bones.clear();
+        this._segments.clear();
         this._depthTarget.dispose();
         this._depthMat.dispose();
+        this._renderer.forceContextLoss();
+        this._renderer.dispose();
     }
 }

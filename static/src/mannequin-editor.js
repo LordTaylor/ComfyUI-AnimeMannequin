@@ -15,8 +15,9 @@ export class MannequinEditor {
         this._selectedBone = null;
         this._selectedSphere = null;
 
-        this._undoStack = [];   // array of scene JSON snapshots
-        this._gender    = 'F';
+        this._undoStack  = [];            // array of scene JSON snapshots
+        this._gender     = 'F';
+        this._buildChain = Promise.resolve(); // serialises concurrent buildMannequin calls
 
         // OrbitControls
         this._orbit = new OrbitControls(renderer.camera, canvas);
@@ -45,7 +46,13 @@ export class MannequinEditor {
 
     get gender() { return this._gender; }
 
-    async buildMannequin(gender, sceneData) {
+    buildMannequin(gender, sceneData) {
+        // Serialise calls — prevents race condition when gender is toggled rapidly
+        this._buildChain = this._buildChain.then(() => this._doBuildMannequin(gender, sceneData));
+        return this._buildChain;
+    }
+
+    async _doBuildMannequin(gender, sceneData) {
         this._gender = gender;
         this._deselect();
         await this._renderer.buildMannequin(gender, sceneData);
@@ -104,8 +111,17 @@ export class MannequinEditor {
         this._renderer.markDirty();
     }
 
+    // Applies a scene and saves undo snapshot — use this from external callers (pose library, bridge)
+    applySceneWithUndo(sceneData) {
+        this._saveUndoSnapshot(); // save BEFORE applying so we can undo back to current state
+        this._renderer.applyScene(sceneData);
+        this._renderer.markDirty();
+    }
+
     _saveUndoSnapshot() {
         const json = JSON.stringify(this._renderer.getSceneData(this._gender));
+        // Skip duplicate snapshots (e.g. mousedown+immediate mouseup with no rotation)
+        if (this._undoStack.length && this._undoStack[this._undoStack.length - 1] === json) return;
         this._undoStack.push(json);
         if (this._undoStack.length > UNDO_LIMIT) this._undoStack.shift();
     }

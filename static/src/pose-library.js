@@ -35,8 +35,8 @@ export class PoseLibrary {
     loadPose(id) {
         const pose = this._load().find(p => p.id === id);
         if (!pose) return;
-        this._renderer.applyScene(pose.scene);
-        this._renderer.markDirty();
+        // Route through editor so undo snapshot is saved before applying
+        this._editor.applySceneWithUndo(pose.scene);
     }
 
     toggle() {
@@ -55,10 +55,20 @@ export class PoseLibrary {
         const header = document.createElement('div');
         header.style.cssText = 'padding:8px;border-bottom:1px solid #444;flex-shrink:0;';
 
+        // Title row with close button
+        const titleRow = document.createElement('div');
+        titleRow.style.cssText = 'display:flex;align-items:center;margin-bottom:6px;';
         const title = document.createElement('span');
         title.textContent = 'Poses';
-        title.style.cssText = 'color:#fff;font-size:12px;font-weight:bold;display:block;margin-bottom:6px;';
-        header.appendChild(title);
+        title.style.cssText = 'color:#fff;font-size:12px;font-weight:bold;flex:1;';
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = '×';
+        closeBtn.title = 'Close panel';
+        closeBtn.style.cssText = 'background:none;border:none;color:#aaa;cursor:pointer;font-size:18px;line-height:1;padding:0 2px;';
+        closeBtn.onclick = () => this.toggle();
+        titleRow.appendChild(title);
+        titleRow.appendChild(closeBtn);
+        header.appendChild(titleRow);
 
         const saveBtn = document.createElement('button');
         saveBtn.textContent = '+ Save current';
