@@ -22,6 +22,26 @@ button { padding: 5px 12px; border: none; border-radius: 4px; cursor: pointer; f
 #status { font-size: 11px; color: #888; padding: 0 8px; }
 #canvas-wrap { flex: 1; position: relative; overflow: hidden; }
 canvas { display: block; width: 100%; height: 100%; }
+
+/* Loading overlay */
+#loading-overlay {
+    position: absolute; inset: 0;
+    background: rgba(20, 20, 20, 0.85);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 999; gap: 16px;
+    transition: opacity 0.2s ease;
+}
+#loading-overlay.hidden { opacity: 0; pointer-events: none; }
+.spinner {
+    width: 48px; height: 48px;
+    border: 4px solid #444;
+    border-top-color: #4fc3f7;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading-msg { font-size: 14px; color: #ccc; letter-spacing: 0.03em; }
 </style>
 </head>
 <body>
@@ -41,6 +61,10 @@ canvas { display: block; width: 100%; height: 100%; }
 </div>
 <div id="canvas-wrap">
   <canvas id="c"></canvas>
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div id="loading-msg">Loading model…</div>
+  </div>
 </div>
 
 <script type="module">
@@ -60,6 +84,17 @@ const editor   = new MannequinEditor(renderer, canvas);
 const poseLib  = new PoseLibrary(editor, renderer);
 poseLib.mount(document.body);
 
+// Loading overlay helpers
+const loadingOverlay = document.getElementById('loading-overlay');
+const loadingMsg     = document.getElementById('loading-msg');
+function showLoading(msg = 'Loading model…') {
+    loadingMsg.textContent = msg;
+    loadingOverlay.classList.remove('hidden');
+}
+function hideLoading() {
+    loadingOverlay.classList.add('hidden');
+}
+
 // Restore pose from URL ?scene= param (set by mannequin_node.js)
 let initScene = null;
 try {
@@ -68,7 +103,9 @@ try {
 } catch { /* malformed — start fresh */ }
 
 const gender = params.get('gender') ?? initScene?.gender ?? 'F';
+showLoading(`Loading ${gender === 'F' ? 'female' : 'male'} model…`);
 await editor.buildMannequin(gender, initScene ?? defaultScene(gender));
+hideLoading();
 
 // Wire toolbar
 const btnGender = document.getElementById('btn-gender');
@@ -80,12 +117,14 @@ btnGender.textContent = gender;
 btnGender.addEventListener('click', async () => {
     if (btnGender.disabled) return;
     btnGender.disabled = true;
+    const next = editor.gender === 'F' ? 'M' : 'F';
+    showLoading(`Loading ${next === 'F' ? 'female' : 'male'} model…`);
     try {
-        const next = editor.gender === 'F' ? 'M' : 'F';
         await editor.setGender(next);
         btnGender.textContent = next;
     } finally {
         btnGender.disabled = false;
+        hideLoading();
     }
 });
 btnUndo.addEventListener('click', () => editor.undo());
