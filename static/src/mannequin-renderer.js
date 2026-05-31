@@ -2,16 +2,17 @@ import * as THREE from '../lib/three.module.js';
 import { BONE_NAMES, BONE_CHILDREN, defaultScene, jsonToScene, defaultProportions } from './mannequin-model.js';
 import { buildSegments, computeBoneOffsets, WORLD_HEIGHT, OPENPOSE_COLORS, JOINT_COLOR } from './geometry-adapter-gltf.js';
 
-// Forward projection of the bust center as a fraction of growth (halfH*(s-1)).
-const BUST_FWD_PROJECTION  = 0.55;
-// Constant forward offset applied at ALL scales so bust sits in front of chest (not inside it).
-const BUST_BASE_FWD        = 0.03;
-// Hinge sag fraction (1.0 = full hinge, top edge stays perfectly fixed).
-const BUST_SAG_FACTOR      = 0.9;
-// Lateral (X) spread: subtle — just enough to widen silhouette from front without detaching.
-const BUST_LATERAL_FACTOR  = 0.2;
-// Narrow each breast to keep visible gap between L and R at the centre.
-const BUST_X_SQUEEZE       = 0.80;
+export const BUST_DEFAULTS = {
+    baseFwd  : 0.00,   // constant forward offset at s=1
+    fwdPush  : 0.65,   // forward push per unit of growth
+    droop    : 0.20,   // downward droop per unit of growth
+    latX     : 0.18,   // lateral X spread per unit of growth
+    latY     : 0.30,   // lateral Y spread (world left/right in chest-bone local space)
+    rotFwd   : 0.60,   // forward tilt (rad) per (s-1)
+    rotLat   : -0.50,  // lateral tilt (rad) per (s-1)
+    rotY     : 0.50,   // left/right rotation (rad) per (s-1)
+    xSqueeze : 1.00,   // X scale multiplier (< 1 narrows each breast)
+};
 
 // COCO 18 limb connections — COCO standard (direct shoulder→elbow, hip→knee, etc.)
 // Colors per Openpose-18-keypoints_coco_color_codes_v13 (100 % brightness joint colors).
@@ -127,6 +128,7 @@ export class MannequinRenderer {
         this._dirty = true;
         this._jointColorMode = 'openpose'; // 'openpose' | 'flat'
         this._proportions = defaultProportions();
+        this._bustCfg = { ...BUST_DEFAULTS };
         this._skeletonLines    = null; // THREE.Group of CylinderMesh per limb — built after mannequin loads
         this._skeletonCylinders = null; // flat array matching SKELETON_LIMBS indices
     }
@@ -139,6 +141,11 @@ export class MannequinRenderer {
     get outputHeight() { return this._outputHeight; }
     get proportions() { return { ...this._proportions }; }
     get groundEnabled() { return this._groundEnabled; }
+    get bustCfg() { return { ...this._bustCfg }; }
+    setBustCfg(partial) {
+        Object.assign(this._bustCfg, partial);
+        this.applyProportions({});   // re-apply with new config
+    }
 
     setGroundVisible(enabled) {
         this._groundEnabled = enabled;
@@ -215,7 +222,30 @@ export class MannequinRenderer {
                 o.visible = (mode !== 'openpose');
             }
         });
+        // Re-apply chest joint hide — the traverse above would re-show it.
+        this._applyChestJointVisibility();
         this._dirty = true;
+    }
+
+    // Hide chest joint sphere when bust scale > 1 so it doesn't float visibly
+    // behind/between the bust meshes. Called from both setJointColorMode and applyProportions.
+    _applyChestJointVisibility() {
+        const bust = this._proportions?.bust ?? 1;
+        const chestSegGroup = this._segments?.get('chest');
+        if (!chestSegGroup) return;
+        let bustHalfH = 0;
+        chestSegGroup.traverse(c => {
+            if (c.userData.proportionGroup === 'bust' && c.userData._bustHalfH)
+                bustHalfH = Math.max(bustHalfH, c.userData._bustHalfH);
+        });
+        const bustGrowth = bustHalfH * Math.max(0, bust - 1);
+        chestSegGroup.children.forEach(c => {
+            if (c.userData.isJoint && !c.userData.isHitTarget) {
+                c.position.z = -bustGrowth;
+                // Hide when bust grows — renderOrder:2 ignores depthTest so hiding is safer.
+                c.visible = (this._jointColorMode !== 'openpose') && (bust <= 1.01);
+            }
+        });
     }
 
     applyProportions(proportions) {
@@ -234,31 +264,38 @@ export class MannequinRenderer {
             obj.scale.set(bs.x * s, bs.y * s, bs.z * s);
             if (!bp) return;
             if (pg === 'bust') {
-                const halfH = obj.userData._bustHalfH ?? 0;
+                const c = this._bustCfg;
+                const halfH  = obj.userData._bustHalfH ?? 0;
                 const growth = halfH * (s - 1);
 
-                // Non-uniform scale: narrowed X (gap between L/R), limited Y (no giant sphere),
-                // forward Z projection (anime style).
                 obj.scale.set(
-                    bs.x * BUST_X_SQUEEZE * Math.pow(s, 0.85),  // narrower — visible centre gap
-                    bs.y * Math.pow(s, 0.7),                      // limit height growth
-                    bs.z * Math.pow(s, 1.0)                       // linear depth
+                    bs.x * c.xSqueeze * Math.pow(s, 0.85),
+                    bs.y * Math.pow(s, 0.7),
+                    bs.z * Math.pow(s, 1.0)
                 );
 
-                // Position: constant base-forward so bust sits in front of chest at s=1,
-                // plus scale-proportional forward + sag + subtle lateral spread.
-                const fwdSign = Math.abs(bp.z) > 0.001 ? Math.sign(bp.z) : -1;
-                const latSign = Math.abs(bp.x) > 0.001 ? Math.sign(bp.x) : 1;
+                const fwdSign  = Math.abs(bp.z) > 0.001 ? Math.sign(bp.z) : -1;
+                const latSign  = Math.abs(bp.x) > 0.001 ? Math.sign(bp.x) : 1;
+                const latSignY = Math.abs(bp.y) > 0.001 ? Math.sign(bp.y) : 1;
                 obj.position.set(
-                    bp.x + latSign * growth * BUST_LATERAL_FACTOR,
-                    bp.y - growth * BUST_SAG_FACTOR,
-                    bp.z + fwdSign * (BUST_BASE_FWD + growth * BUST_FWD_PROJECTION)
+                    bp.x + latSign  * growth * c.latX,
+                    bp.y + latSignY * growth * c.latY,
+                    bp.z + fwdSign  * (c.baseFwd + growth * c.fwdPush) - growth * c.droop
+                );
+
+                obj.rotation.set(
+                    -fwdSign * c.rotFwd * (s - 1),
+                    latSign  * c.rotY   * (s - 1),
+                    latSign  * c.rotLat * (s - 1)
                 );
             } else {
                 // All other extra nodes (ears, eyes, nose): scale offset proportionally
                 obj.position.set(bp.x * s, bp.y * s, bp.z * s);
             }
         });
+
+        // Hide chest joint sphere when bust > 1 (see _applyChestJointVisibility).
+        this._applyChestJointVisibility();
 
         this._dirty = true;
     }

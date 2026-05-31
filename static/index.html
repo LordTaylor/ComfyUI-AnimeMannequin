@@ -102,6 +102,7 @@ canvas { display: block; width: 100%; height: 100%; }
   <div class="toolbar-sep"></div>
   <button id="btn-props"   title="Model Control: proportions, ground plane">Model</button>
   <button id="btn-colors" class="active" title="Toggle joint colors: OpenPose rainbow / flat grey">OpenPose</button>
+  <button id="btn-bust-dbg" title="Bust debug panel">Bust⚙</button>
   <button id="btn-save" title="Capture images and save to ComfyUI node">Close &amp; Save</button>
 </div>
 
@@ -135,6 +136,7 @@ import { ComfyuiBridge }     from './src/comfyui-bridge.js';
 import { defaultScene, jsonToScene } from './src/mannequin-model.js';
 import { PoseLibrary } from './src/pose-library.js';
 import { ProportionsPanel } from './src/proportions-panel.js';
+import { BustDebugPanel } from './src/bust-debug-panel.js';
 
 const params = new URLSearchParams(location.search);
 const mode   = params.get('mode') ?? 'standalone';
@@ -147,6 +149,10 @@ poseLib.mount(document.body);
 
 const propsPanel = new ProportionsPanel(renderer);
 propsPanel.mount(document.body);
+
+const bustDbg = new BustDebugPanel(renderer);
+bustDbg.mount(document.body);
+document.getElementById('btn-bust-dbg').addEventListener('click', () => bustDbg.toggle());
 
 const loadingOverlay = document.getElementById('loading-overlay');
 const loadingMsg     = document.getElementById('loading-msg');
