@@ -118,6 +118,52 @@ export class MannequinEditor {
         this._renderer.markDirty();
     }
 
+    generateRandomPose() {
+        const DEG = Math.PI / 180;
+        const rnd = (lo, hi) => (lo + Math.random() * (hi - lo)) * DEG;
+
+        // Anatomical limits per bone [minX, maxX, minY, maxY, minZ, maxZ] degrees
+        const LIMITS = {
+            torso:       null,
+            spine:       [-20, 20, -25, 25, -15, 15],
+            chest:       [-15, 15, -15, 15, -10, 10],
+            neck:        [-30, 30, -40, 40, -20, 20],
+            head:        [-20, 20, -35, 35, -15, 15],
+            shoulder_L:  [-40, 60, -30, 30, -80, 60],
+            upper_arm_L: [-90, 60, -60, 60, -30, 30],
+            forearm_L:   [  0,110, -10, 10, -10, 10],
+            hand_L:      [-30, 30, -30, 30, -20, 20],
+            shoulder_R:  [-40, 60, -30, 30, -60, 80],
+            upper_arm_R: [-90, 60, -60, 60, -30, 30],
+            forearm_R:   [  0,110, -10, 10, -10, 10],
+            hand_R:      [-30, 30, -30, 30, -20, 20],
+            pelvis:      [-15, 15, -15, 15, -10, 10],
+            thigh_L:     [-60, 40, -30, 30, -40, 20],
+            shin_L:      [-110, 0,  -5,  5,  -5,  5],
+            foot_L:      [-30, 30, -15, 15, -15, 15],
+            thigh_R:     [-60, 40, -30, 30, -20, 40],
+            shin_R:      [-110, 0,  -5,  5,  -5,  5],
+            foot_R:      [-30, 30, -15, 15, -15, 15],
+        };
+
+        this._saveUndoSnapshot();
+        const euler = new THREE.Euler();
+        const quat  = new THREE.Quaternion();
+
+        for (const [boneName, limits] of Object.entries(LIMITS)) {
+            if (!limits) continue;
+            const bone = this._renderer.bones.get(boneName);
+            if (!bone) continue;
+            const [x0,x1,y0,y1,z0,z1] = limits;
+            euler.set(rnd(x0,x1), rnd(y0,y1), rnd(z0,z1), 'XYZ');
+            quat.setFromEuler(euler);
+            bone.quaternion.copy(quat);
+        }
+
+        this._renderer.markDirty();
+        return this._renderer.getSceneData(this._gender);
+    }
+
     _saveUndoSnapshot() {
         const json = JSON.stringify(this._renderer.getSceneData(this._gender));
         // Skip duplicate snapshots (e.g. mousedown+immediate mouseup with no rotation)

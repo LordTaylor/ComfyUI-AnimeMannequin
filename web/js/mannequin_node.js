@@ -141,17 +141,20 @@ function openMannequinModal(node) {
             const images = await invoke(iframe.contentWindow, "MakeImages", [], 20000);
 
             // Upload pose + depth + canny
-            const poseFile  = await uploadImage(images.pose,  "mannequin_pose.png");
-            const depthFile = await uploadImage(images.depth, "mannequin_depth.png");
-            const cannyFile = images.canny ? await uploadImage(images.canny, "mannequin_canny.png") : "";
+            const poseFile     = await uploadImage(images.pose,     "mannequin_pose.png");
+            const depthFile    = await uploadImage(images.depth,    "mannequin_depth.png");
+            const cannyFile    = images.canny    ? await uploadImage(images.canny,    "mannequin_canny.png")    : "";
+            const openposeFile = images.openpose ? await uploadImage(images.openpose, "mannequin_openpose.png") : "";
 
             // Update node widgets
             const pw = node.widgets?.find(w => w.name === "pose_file");
             const dw = node.widgets?.find(w => w.name === "depth_file");
             const cw = node.widgets?.find(w => w.name === "canny_file");
+            const ow = node.widgets?.find(w => w.name === "openpose_file");
             if (pw) pw.value = poseFile;
             if (dw) dw.value = depthFile;
             if (cw) cw.value = cannyFile;
+            if (ow) ow.value = openposeFile;
 
             // Save scene for restore
             const scene = await invoke(iframe.contentWindow, "GetSceneData", [], 5000);
@@ -231,7 +234,7 @@ app.registerExtension({
             // Make file widgets read-only
             setTimeout(() => {
                 for (const w of this.widgets ?? []) {
-                    if (["pose_file", "depth_file", "canny_file"].includes(w.name)) w.disabled = true;
+                    if (["pose_file", "depth_file", "canny_file", "openpose_file"].includes(w.name)) w.disabled = true;
                 }
             }, 100);
         };
