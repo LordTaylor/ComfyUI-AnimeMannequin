@@ -2,6 +2,45 @@ import * as THREE from '../lib/three.module.js';
 import { BONE_NAMES, BONE_CHILDREN, defaultScene, jsonToScene } from './mannequin-model.js';
 import { buildSegments, computeBoneOffsets, WORLD_HEIGHT } from './geometry-adapter-gltf.js';
 
+function sobelCanny(sourceCanvas) {
+    const W = sourceCanvas.width;
+    const H = sourceCanvas.height;
+    const tmp = document.createElement('canvas');
+    tmp.width = W; tmp.height = H;
+    const ctx = tmp.getContext('2d');
+    ctx.drawImage(sourceCanvas, 0, 0);
+    const src = ctx.getImageData(0, 0, W, H).data;
+    const out = new Uint8ClampedArray(W * H * 4);
+
+    const kx = [-1, 0, 1, -2, 0, 2, -1, 0, 1];
+    const ky = [-1, -2, -1, 0, 0, 0, 1, 2, 1];
+
+    for (let y = 1; y < H - 1; y++) {
+        for (let x = 1; x < W - 1; x++) {
+            let gx = 0, gy = 0;
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    const i = ((y + dy) * W + (x + dx)) * 4;
+                    const lum = 0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2];
+                    const ki = (dy + 1) * 3 + (dx + 1);
+                    gx += lum * kx[ki];
+                    gy += lum * ky[ki];
+                }
+            }
+            const mag = Math.sqrt(gx * gx + gy * gy);
+            const v = mag > 30 ? 255 : 0;
+            const di = (y * W + x) * 4;
+            out[di] = out[di + 1] = out[di + 2] = v;
+            out[di + 3] = 255;
+        }
+    }
+
+    const imgData = ctx.createImageData(W, H);
+    imgData.data.set(out);
+    ctx.putImageData(imgData, 0, 0);
+    return tmp.toDataURL('image/png');
+}
+
 export class MannequinRenderer {
     constructor(canvas) {
         this._canvas = canvas;
@@ -200,7 +239,11 @@ export class MannequinRenderer {
         ctx.putImageData(imgData, 0, 0);
         const depthDataUrl = depthCanvas.toDataURL('image/png');
 
-        return { pose: poseDataUrl, depth: depthDataUrl };
+        // --- CANNY render ---
+        // Canny is derived from the pose canvas (which still has the pose render on it)
+        const cannyDataUrl = sobelCanny(this._renderer.domElement);
+
+        return { pose: poseDataUrl, depth: depthDataUrl, canny: cannyDataUrl };
     }
 
     _fitDepthCamera(W, H) {
