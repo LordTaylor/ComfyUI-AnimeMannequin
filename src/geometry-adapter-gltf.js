@@ -249,7 +249,7 @@ async function loadGLB(gender) {
     const key = gender === 'F' ? 'female' : 'male';
     if (_glbCache.has(key)) return _glbCache.get(key);
     const loader = new GLTFLoader();
-    const gltf = await loader.loadAsync(`/mannequin_editor/assets/${key}.glb`);
+    const gltf = await loader.loadAsync(`./assets/${key}.glb`);
     gltf.scene.updateMatrixWorld(true);
     const nodeMap = new Map();
     // GLTFLoader sanitizes obj.name (strips dots/brackets for AnimationMixer binding).
