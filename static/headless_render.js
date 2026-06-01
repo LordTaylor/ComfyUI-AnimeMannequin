@@ -618,7 +618,19 @@ try {
     const canny    = renderCanny(depth, W, H);
     const openpose = renderOpenposeRef(sp, W, H, props);
 
-    const result = JSON.stringify({ pose, depth, canny, openpose });
+    // Collect bone world transforms for Python GLB posed rendering
+    const boneTransforms = {};
+    for (const [name, bone] of bones) {
+        const pos  = new THREE.Vector3();
+        const quat = new THREE.Quaternion();
+        bone.getWorldPosition(pos);
+        bone.getWorldQuaternion(quat);
+        boneTransforms[name] = {
+            pos:  [pos.x, pos.y, pos.z],
+            quat: [quat.x, quat.y, quat.z, quat.w],
+        };
+    }
+    const result = JSON.stringify({ pose, depth, canny, openpose, bones: boneTransforms });
 
     if (outPath) {
         // Write to file (avoids stdout pipe-buffer truncation for large images)

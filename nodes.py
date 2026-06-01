@@ -152,7 +152,8 @@ class AnimeMannequinNode:
 
                 # Use GLB mesh renderer for depth/canny if pyrender is available
                 if _GLB_RENDERER_OK:
-                    glb_result = render_glb_depth(scene_str, width, height)
+                    bone_transforms = rendered.get("bones")
+                    glb_result = render_glb_depth(scene_str, width, height, bone_transforms)
                     if glb_result is not None:
                         depth_arr, canny_arr = glb_result
                         depth = image_to_tensor(depth_arr)
