@@ -227,6 +227,10 @@ if (mode === 'standalone') {
     const exportBar = document.getElementById('export-bar');
     exportBar.style.display = 'flex';
 
+    // Show GitHub link (hidden in ComfyUI embedded mode)
+    const btnGithub = document.getElementById('btn-github');
+    if (btnGithub) btnGithub.style.display = 'inline-block';
+
     function download(dataUrl, name) {
         const a = document.createElement('a');
         a.href = dataUrl; a.download = name; a.click();
