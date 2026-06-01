@@ -612,8 +612,8 @@ export class MannequinRenderer {
         }
 
         ctx.lineWidth = lineW;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
+        ctx.lineCap = 'butt';
+        ctx.lineJoin = 'miter';
 
         // Draw limb lines only — no joint dots in export
         for (const [a, b, col] of SKELETON_LIMBS) {
