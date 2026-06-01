@@ -117,6 +117,14 @@ export class BustDebugPanel {
                 ],
             },
             {
+                label: 'Rotation — Global',
+                fields: [
+                    { key: 'grot_x', label: 'X', min: -2.0, max: 2.0, step: 0.05 },
+                    { key: 'grot_y', label: 'Y', min: -2.0, max: 2.0, step: 0.05 },
+                    { key: 'grot_z', label: 'Z', min: -2.0, max: 2.0, step: 0.05 },
+                ],
+            },
+            {
                 label: 'Scale',
                 fields: [
                     { key: 'scale_x', label: 'X', min: 0.1, max: 2.0, step: 0.05 },

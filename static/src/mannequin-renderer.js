@@ -11,10 +11,14 @@ export const BUST_DEFAULTS = {
     // Position — Global  (world-space, same for both breasts in same direction)
     glob_y     :  0.00,  // world-Y separation per (s-1)  — e.g. 0.05 → 5cm wider at s=2
     glob_z     :  0.20,  // world-Z sag per unit of growth (downward)
-    // Rotation — Local  (bone-relative, angle in rad per (s-1))
+    // Rotation — Local  (bone-relative, angle in rad per (s-1), mirrors L/R)
     rot_x      :  0.60,  // rotation around X (forward tilt)
     rot_y      :  0.50,  // rotation around Y (left/right)
     rot_z      : -0.50,  // rotation around Z (lateral tilt)
+    // Rotation — Global  (world-space, same direction for both breasts, per (s-1))
+    grot_x     :  0.00,  // global rotation around X
+    grot_y     :  0.00,  // global rotation around Y
+    grot_z     :  0.00,  // global rotation around Z
     // Scale
     scale_x    :  1.00,  // X scale multiplier (< 1 narrows each breast)
 };
@@ -375,9 +379,9 @@ export class MannequinRenderer {
                 );
 
                 obj.rotation.set(
-                    -fwdSign * c.rot_x * (s - 1),
-                    latSign  * c.rot_y * (s - 1),
-                    latSign  * c.rot_z * (s - 1)
+                    -fwdSign * c.rot_x * (s - 1) + c.grot_x * (s - 1),
+                     latSign * c.rot_y * (s - 1) + c.grot_y * (s - 1),
+                     latSign * c.rot_z * (s - 1) + c.grot_z * (s - 1)
                 );
             } else {
                 // All other extra nodes (ears, eyes, nose): scale offset proportionally
