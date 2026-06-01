@@ -227,50 +227,6 @@ if (mode === 'standalone') {
     const exportBar = document.getElementById('export-bar');
     exportBar.style.display = 'flex';
 
-    // Export size button + popup
-    const btnExportSize  = document.getElementById('btn-export-size');
-    const popup          = document.getElementById('export-size-popup');
-    const inputW         = document.getElementById('input-export-w');
-    const inputH         = document.getElementById('input-export-h');
-    const btnApply       = document.getElementById('btn-export-size-apply');
-
-    renderer.setOutputSize(1024, 1024);
-    btnExportSize.style.display = 'inline-block';
-
-    function updateExportSizeLabel() {
-        btnExportSize.textContent = `${renderer.outputWidth}×${renderer.outputHeight}`;
-    }
-
-    btnExportSize.addEventListener('click', e => {
-        e.stopPropagation();
-        if (popup.style.display === 'flex') { popup.style.display = 'none'; return; }
-        inputW.value = renderer.outputWidth;
-        inputH.value = renderer.outputHeight;
-        const rect = btnExportSize.getBoundingClientRect();
-        popup.style.display = 'flex';
-        popup.style.top  = (rect.bottom + 4) + 'px';
-        popup.style.left = rect.left + 'px';
-        inputW.focus();
-        inputW.select();
-    });
-
-    btnApply.addEventListener('click', () => {
-        const w = Math.max(64, Math.min(4096, parseInt(inputW.value) || 1024));
-        const h = Math.max(64, Math.min(4096, parseInt(inputH.value) || 1024));
-        renderer.setOutputSize(w, h);
-        updateCropFrame();
-        updateExportSizeLabel();
-        popup.style.display = 'none';
-    });
-
-    inputH.addEventListener('keydown', e => { if (e.key === 'Enter') btnApply.click(); });
-    inputW.addEventListener('keydown', e => { if (e.key === 'Enter') { inputH.focus(); inputH.select(); } });
-
-    document.addEventListener('click', e => {
-        if (popup.style.display === 'flex' && !popup.contains(e.target) && e.target !== btnExportSize)
-            popup.style.display = 'none';
-    });
-
     function download(dataUrl, name) {
         const a = document.createElement('a');
         a.href = dataUrl; a.download = name; a.click();

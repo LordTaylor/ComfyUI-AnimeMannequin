@@ -39,6 +39,10 @@ export const OPENPOSE_COLORS = {
 
 // GLB sub-meshes that attach to a bone without their own FK pivot.
 // These are children of the bone's GLB node (e.g. breasts hang on chest).
+// Sub-meshes rigidly attached to a bone (breasts, face parts, fingers, toes).
+// Kept in sync with the Python renderer's EXTRA_NODES (glb_renderer.py) so the
+// editor preview matches the API output exactly. Fingers/toes are rigid — they
+// move with the parent hand/foot bone but are not individually posable.
 const EXTRA_NODES = {
     female: {
         chest: [
@@ -46,10 +50,44 @@ const EXTRA_NODES = {
             { name: 'GEO-breast_female_primitive_stylized.R', proportionGroup: 'bust' },
         ],
         head: [
-            { name: 'GEO-ear_female_primitive_stylized.L',  proportionGroup: 'head' },
-            { name: 'GEO-ear_female_primitive_stylized.R',  proportionGroup: 'head' },
-            { name: 'GEO-eye_female_primitive_stylized.L',  proportionGroup: 'head' },
-            { name: 'GEO-eye_female_primitive_stylized.R',  proportionGroup: 'head' },
+            { name: 'GEO-ear_female_primitive_stylized.L',           proportionGroup: 'head' },
+            { name: 'GEO-ear_female_primitive_stylized.R',           proportionGroup: 'head' },
+            { name: 'GEO-eye_female_primitive_stylized.L',           proportionGroup: 'head' },
+            { name: 'GEO-eye_female_primitive_stylized.R',           proportionGroup: 'head' },
+            { name: 'GEO-eyelid_upper_female_primitive_stylized.L',  proportionGroup: 'head' },
+            { name: 'GEO-eyelid_upper_female_primitive_stylized.R',  proportionGroup: 'head' },
+            { name: 'GEO-eyelid_lower_female_primitive_stylized.L',  proportionGroup: 'head' },
+            { name: 'GEO-eyelid_lower_female_primitive_stylized.R',  proportionGroup: 'head' },
+            { name: 'GEO-nose_female_primitive_stylized',            proportionGroup: 'head' },
+            { name: 'GEO-nose_bridge_female_primitive_stylized',     proportionGroup: 'head' },
+        ],
+        hand_L: [
+            { name: 'GEO-thumb_female_primitive_stylized.L',         proportionGroup: 'arms' },
+            { name: 'GEO-finger_index_female_primitive_stylized.L',  proportionGroup: 'arms' },
+            { name: 'GEO-finger_middle_female_primitive_stylized.L', proportionGroup: 'arms' },
+            { name: 'GEO-finger_ring_female_primitive_stylized.L',   proportionGroup: 'arms' },
+            { name: 'GEO-finger_pinky_female_primitive_stylized.L',  proportionGroup: 'arms' },
+        ],
+        hand_R: [
+            { name: 'GEO-thumb_female_primitive_stylized.R',         proportionGroup: 'arms' },
+            { name: 'GEO-finger_index_female_primitive_stylized.R',  proportionGroup: 'arms' },
+            { name: 'GEO-finger_middle_female_primitive_stylized.R', proportionGroup: 'arms' },
+            { name: 'GEO-finger_ring_female_primitive_stylized.R',   proportionGroup: 'arms' },
+            { name: 'GEO-finger_pinky_female_primitive_stylized.R',  proportionGroup: 'arms' },
+        ],
+        foot_L: [
+            { name: 'GEO-toe_big_female_primitive_stylized.L',       proportionGroup: 'legs' },
+            { name: 'GEO-toe_index_female_primitive_stylized.L',     proportionGroup: 'legs' },
+            { name: 'GEO-toe_middle_female_primitive_stylized.L',    proportionGroup: 'legs' },
+            { name: 'GEO-toe_ring_female_primitive_stylized.L',      proportionGroup: 'legs' },
+            { name: 'GEO-toe_pinky_female_primitive_stylized.L',     proportionGroup: 'legs' },
+        ],
+        foot_R: [
+            { name: 'GEO-toe_big_female_primitive_stylized.R',       proportionGroup: 'legs' },
+            { name: 'GEO-toe_index_female_primitive_stylized.R',     proportionGroup: 'legs' },
+            { name: 'GEO-toe_middle_female_primitive_stylized.R',    proportionGroup: 'legs' },
+            { name: 'GEO-toe_ring_female_primitive_stylized.R',      proportionGroup: 'legs' },
+            { name: 'GEO-toe_pinky_female_primitive_stylized.R',     proportionGroup: 'legs' },
         ],
     },
     male: {
@@ -60,6 +98,34 @@ const EXTRA_NODES = {
             { name: 'GEO-eye_male_primitive_stylized.R',             proportionGroup: 'head' },
             { name: 'GEO-nose_male_primitive_stylized',              proportionGroup: 'head' },
             { name: 'GEO-nose_bridge_male_primitive_stylized',       proportionGroup: 'head' },
+        ],
+        hand_L: [
+            { name: 'GEO-thumb_male_primitive_stylized.L',           proportionGroup: 'arms' },
+            { name: 'GEO-finger_index_male_primitive_stylized.L',    proportionGroup: 'arms' },
+            { name: 'GEO-finger_middle_male_primitive_stylized.L',   proportionGroup: 'arms' },
+            { name: 'GEO-finger_ring_male_primitive_stylized.L',     proportionGroup: 'arms' },
+            { name: 'GEO-finger_pinky_male_primitive_stylized.L',    proportionGroup: 'arms' },
+        ],
+        hand_R: [
+            { name: 'GEO-thumb_male_primitive_stylized.R',           proportionGroup: 'arms' },
+            { name: 'GEO-finger_index_male_primitive_stylized.R',    proportionGroup: 'arms' },
+            { name: 'GEO-finger_middle_male_primitive_stylized.R',   proportionGroup: 'arms' },
+            { name: 'GEO-finger_ring_male_primitive_stylized.R',     proportionGroup: 'arms' },
+            { name: 'GEO-finger_pinky_male_primitive_stylized.R',    proportionGroup: 'arms' },
+        ],
+        foot_L: [
+            { name: 'GEO-toe_big_male_primitive_stylized.L',         proportionGroup: 'legs' },
+            { name: 'GEO-toe_index_male_primitive_stylized.L',       proportionGroup: 'legs' },
+            { name: 'GEO-toe_middle_male_primitive_stylized.L',      proportionGroup: 'legs' },
+            { name: 'GEO-toe_ring_male_primitive_stylized.L',        proportionGroup: 'legs' },
+            { name: 'GEO-toe_pinky_male_primitive_stylized.L',       proportionGroup: 'legs' },
+        ],
+        foot_R: [
+            { name: 'GEO-toe_big_male_primitive_stylized.R',         proportionGroup: 'legs' },
+            { name: 'GEO-toe_index_male_primitive_stylized.R',       proportionGroup: 'legs' },
+            { name: 'GEO-toe_middle_male_primitive_stylized.R',      proportionGroup: 'legs' },
+            { name: 'GEO-toe_ring_male_primitive_stylized.R',        proportionGroup: 'legs' },
+            { name: 'GEO-toe_pinky_male_primitive_stylized.R',       proportionGroup: 'legs' },
         ],
     },
 };
@@ -249,7 +315,7 @@ async function loadGLB(gender) {
     const key = gender === 'F' ? 'female' : 'male';
     if (_glbCache.has(key)) return _glbCache.get(key);
     const loader = new GLTFLoader();
-    const gltf = await loader.loadAsync(`./assets/${key}.glb`);
+    const gltf = await loader.loadAsync(`/mannequin_editor/assets/${key}.glb`);
     gltf.scene.updateMatrixWorld(true);
     const nodeMap = new Map();
     // GLTFLoader sanitizes obj.name (strips dots/brackets for AnimationMixer binding).

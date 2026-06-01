@@ -28,30 +28,6 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 #btn-colors.active { background: #555; color: #fff; }
 #btn-save { background: #2e7d32; color: #fff; display: none; min-width: 110px; margin-left: auto; }
 #btn-save.saving { background: #1b5e20; }
-#btn-export-size { background: #333; color: #aaa; display: none; }
-#export-size-popup {
-    display: none; position: fixed; z-index: 9999;
-    background: rgba(20,20,20,0.95); color: #eee;
-    border: 1px solid #555; border-radius: 6px;
-    padding: 10px 12px; font-size: 12px; font-family: monospace;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
-    gap: 8px; flex-direction: column; min-width: 160px;
-}
-#export-size-popup label { color: #aaa; font-size: 11px; }
-#export-size-popup .size-row { display: flex; align-items: center; gap: 6px; }
-#export-size-popup .size-row span { color: #aaa; width: 14px; text-align: center; }
-#export-size-popup input[type=number] {
-    width: 68px; background: #2a2a2a; border: 1px solid #555;
-    color: #eee; border-radius: 3px; padding: 3px 6px;
-    font-size: 12px; font-family: monospace;
-}
-#export-size-popup input[type=number]:focus { outline: none; border-color: #4fc3f7; }
-#btn-export-size-apply {
-    background: #1565c0; color: #fff; border: none; border-radius: 4px;
-    padding: 4px 10px; font-size: 12px; font-weight: bold;
-    cursor: pointer; align-self: flex-end; margin-top: 2px;
-}
-#btn-export-size-apply:hover { background: #1976d2; }
 
 #canvas-wrap { flex: 1; position: relative; overflow: hidden; }
 canvas { display: block; width: 100%; height: 100%; }
@@ -136,18 +112,7 @@ canvas { display: block; width: 100%; height: 100%; }
   <div class="toolbar-sep"></div>
   <button id="btn-custom-model" title="Load custom GLB humanoid model">Model ⬆</button>
   <input type="file" id="custom-model-input" accept=".glb" style="display:none" />
-  <button id="btn-export-size" title="Set export image size">1024×1024</button>
   <button id="btn-save" title="Capture images and save to ComfyUI node">Close &amp; Save</button>
-</div>
-
-<div id="export-size-popup">
-  <label>Export size (px)</label>
-  <div class="size-row">
-    <input type="number" id="input-export-w" min="64" max="4096" step="64" value="1024" />
-    <span>×</span>
-    <input type="number" id="input-export-h" min="64" max="4096" step="64" value="1024" />
-  </div>
-  <button id="btn-export-size-apply">Apply</button>
 </div>
 
 <div id="canvas-wrap">
