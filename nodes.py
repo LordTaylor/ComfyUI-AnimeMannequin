@@ -71,13 +71,18 @@ def _dataurl_to_array(data_url: str, width: int, height: int) -> np.ndarray:
     """Decode a PNG data-URL to float32 HxWx3 array, resized to (width, height)."""
     header, b64 = data_url.split(",", 1)
     raw = base64.b64decode(b64)
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
-        f.write(raw)
-        tmp_path = f.name
+    tmp_path = None
     try:
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            f.write(raw)
+            tmp_path = f.name
         arr = load_image(tmp_path, width, height)
     finally:
-        os.unlink(tmp_path)
+        if tmp_path is not None:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
     return arr
 
 
@@ -165,7 +170,7 @@ class AnimeMannequinNode:
                         depth_arr, canny_arr, openpose_arr = glb_result
                         depth = image_to_tensor(depth_arr)
                         canny = image_to_tensor(canny_arr)
-                        pose  = depth  # cheat: pose identical to GLB depth
+                        pose  = depth.clone()  # same content; independent tensor
                         if openpose_arr is not None:
                             openpose = image_to_tensor(openpose_arr)
 
@@ -189,10 +194,15 @@ class AnimeMannequinNode:
         canny_path    = self._safe_join(input_dir, canny_file)
         openpose_path = self._safe_join(input_dir, openpose_file)
 
-        pose     = image_to_tensor(load_image(pose_path,     width, height))
-        depth    = image_to_tensor(load_image(depth_path,    width, height))
-        canny    = image_to_tensor(load_image(canny_path,    width, height))
-        openpose = image_to_tensor(load_image(openpose_path, width, height))
+        def _load_or_blank(path: str) -> np.ndarray:
+            if path and os.path.isfile(path):
+                return load_image(path, width, height)
+            return np.zeros((height, width, 3), dtype=np.float32)
+
+        pose     = image_to_tensor(_load_or_blank(pose_path))
+        depth    = image_to_tensor(_load_or_blank(depth_path))
+        canny    = image_to_tensor(_load_or_blank(canny_path))
+        openpose = image_to_tensor(_load_or_blank(openpose_path))
         return (pose, depth, canny, openpose)
 
 

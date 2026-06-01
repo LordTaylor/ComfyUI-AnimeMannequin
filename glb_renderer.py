@@ -455,32 +455,29 @@ _OPENPOSE_COLORS = {
 }
 
 _SKELETON_LIMBS = [
-    ("neck", "head",        (255, 0, 0)),
-    ("neck", "shoulder_R",  (255, 170, 0)),
-    ("shoulder_R", "forearm_R", (255, 255, 0)),
-    ("forearm_R", "hand_R", (170, 255, 0)),
-    ("neck", "shoulder_L",  (85, 255, 0)),
-    ("shoulder_L", "forearm_L", (0, 255, 0)),
-    ("forearm_L", "hand_L", (0, 255, 85)),
-    ("neck", "thigh_R",     (0, 255, 170)),
-    ("thigh_R", "shin_R",   (0, 255, 255)),
-    ("shin_R", "foot_R",    (0, 170, 255)),
-    ("neck", "thigh_L",     (0, 85, 255)),
-    ("thigh_L", "shin_L",   (0, 0, 255)),
-    ("shin_L", "foot_L",    (85, 0, 255)),
+    # head / spine
+    ("neck",        "head",       (255,   0,   0)),
+    # right arm  (shoulder → upper_arm → forearm → hand)
+    ("neck",        "shoulder_R", (255, 170,   0)),
+    ("shoulder_R",  "upper_arm_R",(255, 213,   0)),
+    ("upper_arm_R", "forearm_R",  (255, 255,   0)),
+    ("forearm_R",   "hand_R",     (170, 255,   0)),
+    # left arm
+    ("neck",        "shoulder_L", ( 85, 255,   0)),
+    ("shoulder_L",  "upper_arm_L",(  0, 255,  43)),
+    ("upper_arm_L", "forearm_L",  (  0, 255,  85)),
+    ("forearm_L",   "hand_L",     (  0, 255, 170)),
+    # right leg (pelvis → thigh → shin → foot)
+    ("pelvis",      "thigh_R",    (  0, 255, 170)),
+    ("thigh_R",     "shin_R",     (  0, 255, 255)),
+    ("shin_R",      "foot_R",     (  0, 170, 255)),
+    # left leg
+    ("pelvis",      "thigh_L",    (  0,  85, 255)),
+    ("thigh_L",     "shin_L",     (  0,   0, 255)),
+    ("shin_L",      "foot_L",     ( 85,   0, 255)),
+    # torso spine
+    ("neck",        "pelvis",     (136, 136, 136)),
 ]
-
-# Joint dot radius as a fraction used by the headless-style formula r = (W/14)*frac*18.
-_JOINT_RADIUS = {
-    "head": 0.11,  "neck": 0.045, "chest": 0.08,  "spine": 0.06,  "pelvis": 0.075,
-    "shoulder_L": 0.04, "shoulder_R": 0.04,
-    "upper_arm_L": 0.028, "upper_arm_R": 0.028,
-    "forearm_L": 0.022,  "forearm_R": 0.022,
-    "hand_L": 0.022,     "hand_R": 0.022,
-    "thigh_L": 0.045,    "thigh_R": 0.045,
-    "shin_L": 0.034,     "shin_R": 0.034,
-    "foot_L": 0.028,     "foot_R": 0.028,
-}
 
 
 def _project_joints(joints, cam_pose, yfov, aspect, width, height):
@@ -627,7 +624,11 @@ def render_glb_depth(scene_json: str, width: int, height: int, bone_transforms=N
     pr_scene.add(pyrender.DirectionalLight(color=[1, 1, 1], intensity=3.0), pose=cam_pose)
 
     # ── Render ────────────────────────────────────────────────────────────────
-    renderer = pyrender.OffscreenRenderer(width, height)
+    try:
+        renderer = pyrender.OffscreenRenderer(width, height)
+    except Exception as e:
+        print(f"[AnimeMannequin] OffscreenRenderer init failed: {e}")
+        return None
     try:
         _, depth = renderer.render(pr_scene)
     finally:
