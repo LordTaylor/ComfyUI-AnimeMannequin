@@ -9,6 +9,7 @@ export const BUST_DEFAULTS = {
     loc_z      :  0.65,  // Z forward push per unit of growth
     loc_z_base :  0.00,  // Z constant base offset (independent of size)
     // Position — Global  (world-space, same for both breasts in same direction)
+    glob_y_base:  0.00,  // world-Y constant separation (always, regardless of scale)
     glob_y     :  0.00,  // world-Y separation per (s-1)  — e.g. 0.05 → 5cm wider at s=2
     glob_z     :  0.20,  // world-Z sag per unit of growth (downward)
     // Rotation — Local  (bone-relative, angle in rad per (s-1), mirrors L/R)
@@ -374,7 +375,7 @@ export class MannequinRenderer {
 
                 obj.position.set(
                     bp.x + latSign  * growth * c.loc_x,
-                    bp.y + latSignY * (growth * c.loc_y + (s - 1) * c.glob_y),
+                    bp.y + latSignY * (growth * c.loc_y + (s - 1) * c.glob_y + c.glob_y_base),
                     bp.z + fwdSign  * (c.loc_z_base + growth * c.loc_z) - growth * c.glob_z
                 );
 

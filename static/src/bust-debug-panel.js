@@ -104,8 +104,9 @@ export class BustDebugPanel {
             {
                 label: 'Position — Global',
                 fields: [
-                    { key: 'glob_y', label: 'Y', min:  0.0, max:  0.3,  step: 0.005 },
-                    { key: 'glob_z', label: 'Z', min: -1.0, max:  1.0,  step: 0.05  },
+                    { key: 'glob_y_base', label: 'Y sep', min: -0.3, max: 0.3, step: 0.005 },
+                    { key: 'glob_y',      label: 'Y',     min:  0.0, max: 0.3, step: 0.005 },
+                    { key: 'glob_z',      label: 'Z',     min: -1.0, max: 1.0, step: 0.05  },
                 ],
             },
             {

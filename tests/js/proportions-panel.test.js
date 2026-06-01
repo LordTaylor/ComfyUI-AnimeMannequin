@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../static/src/mannequin-renderer.js', () => ({
-    BUST_DEFAULTS: { loc_z_base:0, loc_z:0.65, glob_z:0.2, loc_x:0.18, loc_y:0.3, glob_y:0.0,
+    BUST_DEFAULTS: { loc_z_base:0, loc_z:0.65, glob_z:0.2, loc_x:0.18, loc_y:0.3, glob_y_base:0.0, glob_y:0.0,
                      rot_x:0.6, rot_z:-0.5, rot_y:0.5, grot_x:0.0, grot_y:0.0, grot_z:0.0, scale_x:1.0 },
 }));
 vi.mock('../../static/src/mannequin-model.js', () => ({
