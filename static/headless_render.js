@@ -359,57 +359,135 @@ function renderPose(sp, W, H) {
     return canvas.toDataURL('image/png');
 }
 
-// ── Render: DEPTH via sphere raycast ─────────────────────────────────────────
-// For each bone we cast a sphere (radius from PROPORTIONS).
-// Per pixel: find closest sphere along the view ray → depth value.
+// ── Depth ray helpers ─────────────────────────────────────────────────────────
+
+function _raySphereT(px, py, pz, dx, dy, dz, cx, cy, cz, r) {
+    const ox = px - cx, oy = py - cy, oz = pz - cz;
+    const b  = dx * ox + dy * oy + dz * oz;
+    const c  = ox * ox + oy * oy + oz * oz - r * r;
+    const disc = b * b - c;
+    if (disc < 0) return Infinity;
+    const t = -b - Math.sqrt(disc);
+    return t > 0 ? t : Infinity;
+}
+
+function _rayCapsuleT(px, py, pz, dx, dy, dz, ax, ay, az, bx, by, bz, r) {
+    const segX = bx - ax, segY = by - ay, segZ = bz - az;
+    const seg2 = segX * segX + segY * segY + segZ * segZ;
+    if (seg2 < 1e-10) return _raySphereT(px, py, pz, dx, dy, dz, ax, ay, az, r);
+
+    const ox = px - ax, oy = py - ay, oz = pz - az;
+    const inv2   = 1 / seg2;
+    const d_s    = (dx * segX + dy * segY + dz * segZ) * inv2;
+    const o_s    = (ox * segX + oy * segY + oz * segZ) * inv2;
+
+    // Component of ray dir perpendicular to capsule axis
+    const nx = dx - segX * d_s, ny = dy - segY * d_s, nz = dz - segZ * d_s;
+    // Component of origin-offset perpendicular to capsule axis
+    const fx = ox - segX * o_s, fy = oy - segY * o_s, fz = oz - segZ * o_s;
+
+    const a = nx * nx + ny * ny + nz * nz;
+    const b_c = 2 * (nx * fx + ny * fy + nz * fz);
+    const c_c = fx * fx + fy * fy + fz * fz - r * r;
+
+    if (a < 1e-12) {
+        // Ray nearly parallel to capsule axis — just test sphere caps
+        return Math.min(
+            _raySphereT(px, py, pz, dx, dy, dz, ax, ay, az, r),
+            _raySphereT(px, py, pz, dx, dy, dz, bx, by, bz, r),
+        );
+    }
+
+    const disc = b_c * b_c - 4 * a * c_c;
+    if (disc >= 0) {
+        const sq = Math.sqrt(disc);
+        for (const t of [(-b_c - sq) / (2 * a), (-b_c + sq) / (2 * a)]) {
+            if (t <= 0) continue;
+            // Project hit point onto capsule segment; must be in [0,1]
+            const proj = ((ox + t * dx) * segX + (oy + t * dy) * segY + (oz + t * dz) * segZ) * inv2;
+            if (proj >= 0 && proj <= 1) return t;
+        }
+    }
+    // Check hemisphere end-caps
+    return Math.min(
+        _raySphereT(px, py, pz, dx, dy, dz, ax, ay, az, r),
+        _raySphereT(px, py, pz, dx, dy, dz, bx, by, bz, r),
+    );
+}
+
+// ── Render: DEPTH via capsule + sphere raycast ────────────────────────────────
+// Body = set of capsules (limb segments) + sphere for head.
+// Float32 buffer → no precision loss; correct normalisation to [DEPTH_MIN, 255].
 
 function renderDepth(bones, camera, W, H, props) {
-    // Collect world-space spheres  [ {cx, cy, cz, r} ]
-    const spheres = [];
-    const tmp     = new THREE.Vector3();
-    for (const name of BONE_NAMES) {
-        const bone = bones.get(name);
-        if (!bone) continue;
-        bone.getWorldPosition(tmp);
-        // Scale radius by the torso scale (approx WORLD_HEIGHT scaling)
-        const torsoScale = bones.get('torso').scale.x;
-        const baseR = (props[name]?.radius ?? props[name]?.width * 0.5 ?? 0.03) * torsoScale;
-        const s     = bone.scale.x !== 1 ? bone.scale.x : 1;
-        spheres.push({ cx: tmp.x, cy: tmp.y, cz: tmp.z, r: baseR * s });
+    const torsoScale = bones.get('torso').scale.x;
+    const tmp1 = new THREE.Vector3();
+    const tmp2 = new THREE.Vector3();
+
+    // Capsule: [parentBone, childBone, radiusSourceBone]
+    const SEGMENTS = [
+        ['torso',       'spine',       'spine'],
+        ['spine',       'chest',       'chest'],
+        ['chest',       'neck',        'neck'],
+        ['chest',       'shoulder_L',  'shoulder_L'],
+        ['shoulder_L',  'upper_arm_L', 'upper_arm_L'],
+        ['upper_arm_L', 'forearm_L',   'forearm_L'],
+        ['forearm_L',   'hand_L',      'hand_L'],
+        ['chest',       'shoulder_R',  'shoulder_R'],
+        ['shoulder_R',  'upper_arm_R', 'upper_arm_R'],
+        ['upper_arm_R', 'forearm_R',   'forearm_R'],
+        ['forearm_R',   'hand_R',      'hand_R'],
+        ['torso',       'pelvis',      'pelvis'],
+        ['pelvis',      'thigh_L',     'thigh_L'],
+        ['thigh_L',     'shin_L',      'shin_L'],
+        ['shin_L',      'foot_L',      'foot_L'],
+        ['pelvis',      'thigh_R',     'thigh_R'],
+        ['thigh_R',     'shin_R',      'shin_R'],
+        ['shin_R',      'foot_R',      'foot_R'],
+    ];
+
+    const capsules = [];
+    for (const [pName, cName, rName] of SEGMENTS) {
+        const pb = bones.get(pName), cb = bones.get(cName);
+        if (!pb || !cb) continue;
+        pb.getWorldPosition(tmp1); cb.getWorldPosition(tmp2);
+        const bp = props[rName] ?? {};
+        const r  = (bp.radius ?? (bp.width ?? 0.05) * 0.5) * torsoScale;
+        capsules.push({ ax: tmp1.x, ay: tmp1.y, az: tmp1.z,
+                        bx: tmp2.x, by: tmp2.y, bz: tmp2.z, r });
     }
+
+    // Head sphere (special — larger than capsule radius)
+    bones.get('head').getWorldPosition(tmp1);
+    const headR  = (props.head?.radius ?? 0.115) * torsoScale;
+    const headSphere = { cx: tmp1.x, cy: tmp1.y, cz: tmp1.z, r: headR };
 
     // Unproject camera ray per pixel
     const invPV = new THREE.Matrix4()
         .multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
         .invert();
-    const camPos = camera.position;
+    const cp = camera.position;
 
-    const DEPTH_MIN = 30;
-    const buf = new Uint8Array(W * H);
+    const buf = new Float32Array(W * H);  // 0 = background
     let minD = Infinity, maxD = -Infinity;
 
     for (let row = 0; row < H; row++) {
         for (let col = 0; col < W; col++) {
-            // NDC of pixel centre
-            const nx = (col + 0.5) / W * 2 - 1;
-            const ny = -(row + 0.5) / H * 2 + 1;
-            // Far-plane world position
+            const nx  = (col + 0.5) / W * 2 - 1;
+            const ny  = -(row + 0.5) / H * 2 + 1;
             const far = new THREE.Vector4(nx, ny, 1, 1).applyMatrix4(invPV);
-            const fx = far.x / far.w, fy = far.y / far.w, fz = far.z / far.w;
-            const rdx = fx - camPos.x, rdy = fy - camPos.y, rdz = fz - camPos.z;
-            const len  = Math.sqrt(rdx * rdx + rdy * rdy + rdz * rdz);
-            const rx   = rdx / len, ry = rdy / len, rz = rdz / len;
+            const fx  = far.x / far.w, fy = far.y / far.w, fz = far.z / far.w;
+            const rdx = fx - cp.x, rdy = fy - cp.y, rdz = fz - cp.z;
+            const rl  = Math.sqrt(rdx * rdx + rdy * rdy + rdz * rdz);
+            const rx  = rdx / rl, ry = rdy / rl, rz = rdz / rl;
 
-            let tMin = Infinity;
-            for (const { cx, cy, cz, r } of spheres) {
-                const ocx = camPos.x - cx, ocy = camPos.y - cy, ocz = camPos.z - cz;
-                const b = rx * ocx + ry * ocy + rz * ocz;
-                const c = ocx * ocx + ocy * ocy + ocz * ocz - r * r;
-                const disc = b * b - c;
-                if (disc < 0) continue;
-                const t = -b - Math.sqrt(disc);
-                if (t > 0 && t < tMin) tMin = t;
+            let tMin = _raySphereT(cp.x, cp.y, cp.z, rx, ry, rz,
+                                   headSphere.cx, headSphere.cy, headSphere.cz, headSphere.r);
+            for (const { ax, ay, az, bx, by, bz, r } of capsules) {
+                const t = _rayCapsuleT(cp.x, cp.y, cp.z, rx, ry, rz, ax, ay, az, bx, by, bz, r);
+                if (t < tMin) tMin = t;
             }
+
             if (tMin < Infinity) {
                 buf[row * W + col] = tMin;
                 if (tMin < minD) minD = tMin;
@@ -418,14 +496,15 @@ function renderDepth(bones, camera, W, H, props) {
         }
     }
 
-    const canvas = createCanvas(W, H);
-    const ctx    = canvas.getContext('2d');
-    const imgData = ctx.createImageData(W, H);
-    const range   = maxD - minD || 1;
+    // Normalise: near → 255 (bright), far → DEPTH_MIN (dark), background → 0
+    const DEPTH_MIN = 30;
+    const range     = maxD - minD || 1;
+    const canvas    = createCanvas(W, H);
+    const ctx       = canvas.getContext('2d');
+    const imgData   = ctx.createImageData(W, H);
     for (let i = 0; i < W * H; i++) {
-        const v = buf[i];
-        // background = 0 → black. geometry: near = 255, far = DEPTH_MIN (bright near)
-        const norm = v === 0 ? 0 : 255 - Math.round((v - minD) / range * (255 - DEPTH_MIN));
+        const v    = buf[i];
+        const norm = v === 0 ? 0 : Math.round(255 - (v - minD) / range * (255 - DEPTH_MIN));
         imgData.data[i * 4]     = norm;
         imgData.data[i * 4 + 1] = norm;
         imgData.data[i * 4 + 2] = norm;
