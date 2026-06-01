@@ -605,7 +605,6 @@ export class MannequinRenderer {
             sp.set(name, { x: (p.x * 0.5 + 0.5) * W, y: (-p.y * 0.5 + 0.5) * H });
         }
 
-        const dotR  = Math.max(5, Math.round(W / 70));
         const lineW = Math.max(3, Math.round(W / 90));
 
         function rgb(hex) {
@@ -616,26 +615,12 @@ export class MannequinRenderer {
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
 
-        // Draw limb lines
+        // Draw limb lines only — no joint dots in export
         for (const [a, b, col] of SKELETON_LIMBS) {
             const pa = sp.get(a), pb = sp.get(b);
             if (!pa || !pb) continue;
             ctx.strokeStyle = rgb(col);
             ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
-        }
-
-        // Draw keypoint dots with correct per-bone COCO-18 colors (not the line color)
-        const drawn = new Set();
-        for (const [a, b] of SKELETON_LIMBS) {
-            for (const k of [a, b]) {
-                if (drawn.has(k)) continue;
-                drawn.add(k);
-                const p = sp.get(k);
-                if (!p) continue;
-                const dotCol = OPENPOSE_COLORS[k] ?? 0xffffff;
-                ctx.fillStyle = rgb(dotCol);
-                ctx.beginPath(); ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2); ctx.fill();
-            }
         }
 
         return canvas.toDataURL('image/png');
