@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Anime Mannequin Editor</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #1a1a1a; color: #eee; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
+#toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #2a2a2a; border-bottom: 1px solid #444; flex-shrink: 0; }
+#toolbar h1 { font-size: 13px; font-weight: bold; color: #fff; margin-right: 4px; }
+.toolbar-sep { width: 1px; height: 20px; background: #555; margin: 0 2px; flex-shrink: 0; }
+button { padding: 5px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; white-space: nowrap; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+#btn-gender { background: #1565c0; color: #fff; min-width: 36px; }
+#btn-undo, #btn-redo, #btn-reset { background: #333; color: #aaa; }
+#btn-mirror-lr, #btn-mirror-rl { background: #333; color: #aaa; }
+#btn-poses { background: #333; color: #aaa; }
+#btn-random { background: #6a1b9a; color: #fff; }
+#btn-random-mode { background: #333; color: #aaa; padding: 5px 8px; font-size: 14px; }
+#btn-random-mode.wild { background: #bf360c; color: #fff; }
+#btn-props { background: #333; color: #aaa; }
+#btn-props.active { background: #4a6080; color: #cdf; }
+#btn-colors { background: #333; color: #aaa; min-width: 68px; }
+#btn-overlays { background: #333; color: #aaa; }
+#btn-overlays.active { background: #4a5a3a; color: #cef; }
+#btn-custom-model { background: #333; color: #aaa; }
+#btn-custom-model.active { background: #5a3a1a; color: #fdc; }
+#btn-colors.active { background: #555; color: #fff; }
+#btn-save { background: #2e7d32; color: #fff; display: none; min-width: 110px; margin-left: auto; }
+#btn-save.saving { background: #1b5e20; }
+
+#canvas-wrap { flex: 1; position: relative; overflow: hidden; }
+canvas { display: block; width: 100%; height: 100%; }
+
+/* Crop frame — shows the output aspect ratio as a framing guide */
+#crop-frame {
+    position: absolute;
+    pointer-events: none;
+    border: 1.5px solid rgba(255, 255, 255, 0.55);
+    /* Outer glow so it stays visible against light backgrounds */
+    outline: 1px solid rgba(0, 0, 0, 0.35);
+    z-index: 5;
+    display: none;
+    /* Corner dots for better visibility */
+    box-sizing: border-box;
+}
+
+/* Floating export buttons — standalone only, bottom-left of canvas */
+#export-bar {
+    display: none;
+    position: absolute; bottom: 12px; left: 12px;
+    gap: 6px; z-index: 10;
+    flex-direction: column; align-items: flex-start;
+}
+#export-bar button {
+    background: rgba(21,101,192,0.85); color: #fff;
+    backdrop-filter: blur(4px);
+    padding: 6px 14px; font-size: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}
+#export-bar button:hover { background: rgba(21,101,192,1); }
+
+/* ComfyUI status overlay — bottom of canvas */
+#status-bar {
+    display: none;
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 4px 12px; background: rgba(0,0,0,0.55);
+    font-size: 11px; color: #aaa;
+    pointer-events: none;
+}
+
+/* Loading overlay */
+#loading-overlay {
+    position: absolute; inset: 0;
+    background: rgba(20,20,20,0.85);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 999; gap: 16px;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+#loading-overlay.hidden { opacity: 0; }
+.spinner {
+    width: 48px; height: 48px;
+    border: 4px solid #444; border-top-color: #4fc3f7;
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading-msg { font-size: 14px; color: #ccc; letter-spacing: 0.03em; }
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <h1>Mannequin</h1>
+  <div class="toolbar-sep"></div>
+  <button id="btn-gender" title="Toggle gender (F / M)">F</button>
+  <div class="toolbar-sep"></div>
+  <button id="btn-undo"      title="Undo last rotation (Ctrl+Z)">Undo</button>
+  <button id="btn-redo"      title="Redo (Ctrl+Shift+Z)">Redo</button>
+  <button id="btn-reset"     title="Reset all bones to default pose">Reset</button>
+  <button id="btn-mirror-lr" title="Copy left side → right side">L→R</button>
+  <button id="btn-mirror-rl" title="Copy right side → left side">R→L</button>
+  <div class="toolbar-sep"></div>
+  <button id="btn-poses"       title="Open saved pose library">Poses</button>
+  <button id="btn-random"      title="Generate random pose">Random</button>
+  <button id="btn-random-mode" title="Safe: anatomical limits  |  click for Wild">🔒</button>
+  <div class="toolbar-sep"></div>
+  <button id="btn-props"   title="Model Control: proportions, ground plane">Model</button>
+  <button id="btn-colors" class="active" title="Toggle joint colors: OpenPose rainbow / flat grey">OpenPose</button>
+  <button id="btn-bust-dbg" title="Bust debug panel">Bust⚙</button>
+  <button id="btn-overlays" title="Overlays — reference image &amp; crop frame">Overlays</button>
+  <div class="toolbar-sep"></div>
+  <button id="btn-custom-model" title="Load custom GLB humanoid model">Model ⬆</button>
+  <input type="file" id="custom-model-input" accept=".glb" style="display:none" />
+  <button id="btn-save" title="Capture images and save to ComfyUI node">Close &amp; Save</button>
+</div>
+
+<div id="canvas-wrap">
+  <canvas id="c"></canvas>
+
+  <!-- Background reference image — editor only, not in exports -->
+  <img id="bg-image"
+       style="display:none; position:absolute; inset:0;
+              width:100%; height:100%; object-fit:cover;
+              pointer-events:none; transform-origin:center;" />
+
+  <!-- Hidden file input for bg image picker -->
+  <input type="file" id="bg-file-input" accept="image/*" style="display:none" />
+
+  <!-- standalone download buttons — float over canvas, bottom-left -->
+  <div id="export-bar">
+    <button id="btn-dl-pose"  title="Download pose render as PNG">⬇ pose.png</button>
+    <button id="btn-dl-depth" title="Download depth map as PNG">⬇ depth.png</button>
+    <button id="btn-dl-canny" title="Download Canny edge map as PNG">⬇ canny.png</button>
+  </div>
+
+  <!-- comfyui progress — bottom strip -->
+  <div id="status-bar"><span id="status">Ready</span></div>
+
+  <!-- Crop frame: shows the output W×H aspect ratio as a framing guide -->
+  <div id="crop-frame"></div>
+
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div id="loading-msg">Loading model…</div>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
