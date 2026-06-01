@@ -316,7 +316,10 @@ def _build_posed_segments(scene, gender: str, bone_transforms: dict):
                 r_parent = rest_pos.get(parent_bone)
 
                 if r_bone is not None and r_parent is not None:
-                    local_offset = r_bone - r_parent          # offset in GLB rest pose
+                    # GLB rest offset between joints.  The GLB segment geometry is built
+                    # along this offset, so rotating it by parent_R_glb keeps the
+                    # kinematic chain connected (child joint lands at parent mesh tip).
+                    local_offset = r_bone - r_parent
                     bn_new_pos = parent_new_pos + parent_R_glb @ local_offset
                 else:
                     bn_new_pos = rest_pos.get(bone_name, parent_new_pos)
@@ -369,13 +372,19 @@ def _build_posed_segments(scene, gender: str, bone_transforms: dict):
 
             results.append((extra_geom, T_extra))
 
-    return results
+    return results, new_pos
 
 
 # ── Camera ────────────────────────────────────────────────────────────────────
 
 def _build_camera_pose(centroid, size, azimuth_deg=0, elevation_deg=5):
-    """4×4 camera-pose matrix orbiting the centroid (matches headless_render.js)."""
+    """4×4 camera-pose matrix orbiting the centroid (matches headless_render.js).
+
+    GLB has X-axis flipped vs FK/Three.js (upper_arm_L at +X in GLB, -X in FK).
+    The bone rotation conversion R_glb = C @ R_fk @ C is correct when the camera
+    looks from the -Z side in GLB space, so we negate cx and cz to mirror the
+    azimuth, keeping depth/canny aligned with the pose/openpose images.
+    """
     az  = math.radians(azimuth_deg)
     el  = math.radians(elevation_deg)
     d   = size * 1.4
@@ -427,6 +436,110 @@ def _sobel_canny(depth_uint8: np.ndarray) -> np.ndarray:
     return out
 
 
+# ── OpenPose from GLB joints ──────────────────────────────────────────────────
+# Single source of truth: the openpose skeleton is drawn from the SAME posed GLB
+# joint positions as the depth mesh, projected with the SAME camera.  This makes
+# the skeleton overlay the mesh exactly — no second (FK) generator, no drift.
+
+_OPENPOSE_COLORS = {
+    "head": (255, 0, 0),    "neck": (255, 85, 0),   "chest": (255, 170, 0),
+    "shoulder_R": (255, 255, 0), "shoulder_L": (170, 255, 0),
+    "upper_arm_R": (85, 255, 0), "upper_arm_L": (0, 255, 85),
+    "forearm_R": (0, 255, 170),  "forearm_L": (0, 255, 255),
+    "hand_R": (0, 170, 255),     "hand_L": (0, 85, 255),
+    "pelvis": (170, 0, 255),
+    "thigh_R": (255, 0, 170),    "thigh_L": (170, 0, 170),
+    "shin_R": (0, 0, 255),       "shin_L": (85, 0, 255),
+    "foot_R": (170, 170, 255),   "foot_L": (255, 85, 255),
+    "spine": (136, 136, 136),
+}
+
+_SKELETON_LIMBS = [
+    ("neck", "head",        (255, 0, 0)),
+    ("neck", "shoulder_R",  (255, 170, 0)),
+    ("shoulder_R", "forearm_R", (255, 255, 0)),
+    ("forearm_R", "hand_R", (170, 255, 0)),
+    ("neck", "shoulder_L",  (85, 255, 0)),
+    ("shoulder_L", "forearm_L", (0, 255, 0)),
+    ("forearm_L", "hand_L", (0, 255, 85)),
+    ("neck", "thigh_R",     (0, 255, 170)),
+    ("thigh_R", "shin_R",   (0, 255, 255)),
+    ("shin_R", "foot_R",    (0, 170, 255)),
+    ("neck", "thigh_L",     (0, 85, 255)),
+    ("thigh_L", "shin_L",   (0, 0, 255)),
+    ("shin_L", "foot_L",    (85, 0, 255)),
+]
+
+# Joint dot radius as a fraction used by the headless-style formula r = (W/14)*frac*18.
+_JOINT_RADIUS = {
+    "head": 0.11,  "neck": 0.045, "chest": 0.08,  "spine": 0.06,  "pelvis": 0.075,
+    "shoulder_L": 0.04, "shoulder_R": 0.04,
+    "upper_arm_L": 0.028, "upper_arm_R": 0.028,
+    "forearm_L": 0.022,  "forearm_R": 0.022,
+    "hand_L": 0.022,     "hand_R": 0.022,
+    "thigh_L": 0.045,    "thigh_R": 0.045,
+    "shin_L": 0.034,     "shin_R": 0.034,
+    "foot_L": 0.028,     "foot_R": 0.028,
+}
+
+
+def _project_joints(joints, cam_pose, yfov, aspect, width, height):
+    """
+    Project 3D world joint positions to 2D pixel coords using the same pinhole
+    camera as the depth render (pyrender PerspectiveCamera, looks down -Z).
+
+    Returns {bone: (px, py, view_z)}; view_z < 0 means in front of the camera.
+    """
+    world_to_cam = np.linalg.inv(cam_pose)
+    t = math.tan(yfov / 2.0)
+    out = {}
+    for name, pos in joints.items():
+        p = world_to_cam @ np.array([pos[0], pos[1], pos[2], 1.0])
+        vz = p[2]
+        if vz >= -1e-6:           # behind / on camera plane → skip
+            continue
+        ndc_x = (p[0] / (-vz)) / (aspect * t)
+        ndc_y = (p[1] / (-vz)) / t
+        px = (ndc_x * 0.5 + 0.5) * width
+        py = (1.0 - (ndc_y * 0.5 + 0.5)) * height
+        out[name] = (px, py, vz)
+    return out
+
+
+def _render_openpose_from_joints(joints2d, width, height):
+    """Draw the OpenPose-18 skeleton (grey bg, small colour dots + skeleton lines).
+
+    Dot radius: ~4-6 px (ControlNet-style, not the big reference blobs from the
+    headless editor which used r = (W/14) * frac * 18 → 100-150 px at 1024 px).
+    """
+    from PIL import Image, ImageDraw
+
+    img  = Image.new("RGB", (width, height), (74, 74, 74))
+    draw = ImageDraw.Draw(img, "RGBA")
+
+    # Small fixed dot radius — independent of joint type (standard ControlNet size)
+    r = max(3, round(width / 160))
+
+    # Joint dots
+    for name, (px, py, _vz) in joints2d.items():
+        col = _OPENPOSE_COLORS.get(name)
+        if col is None:
+            continue
+        draw.ellipse([px - r, py - r, px + r, py + r], fill=col)
+
+    # Skeleton lines (thin, alpha 0.7)
+    line_w = max(1, round(width / 256))
+    for a, b, col in _SKELETON_LIMBS:
+        pa = joints2d.get(a)
+        pb = joints2d.get(b)
+        if pa is None or pb is None:
+            continue
+        draw.line([pa[0], pa[1], pb[0], pb[1]], fill=(col[0], col[1], col[2], 179), width=line_w)
+
+    arr = np.asarray(img).astype(np.float32) / 255.0
+    return arr
+
+
 # ── Main API ──────────────────────────────────────────────────────────────────
 
 def render_glb_depth(scene_json: str, width: int, height: int, bone_transforms=None):
@@ -445,7 +558,10 @@ def render_glb_depth(scene_json: str, width: int, height: int, bone_transforms=N
 
     Returns
     -------
-    (depth_arr, canny_arr) : (H×W×3 float32 [0,1]) or None
+    (depth_arr, canny_arr, openpose_arr) : each H×W×3 float32 [0,1], or None.
+        openpose_arr is generated from the SAME posed GLB joints as the depth
+        mesh (projected with the same camera), so it overlays the mesh exactly.
+        openpose_arr is None for the T-pose fallback (no posed joints available).
     """
     if not _PYRENDER_OK:
         return None
@@ -473,7 +589,7 @@ def render_glb_depth(scene_json: str, width: int, height: int, bone_transforms=N
         if not os.path.isfile(glb_path):
             return None
         scene = trimesh.load(glb_path, force="scene")
-        segments = _build_posed_segments(scene, gender, bone_transforms)
+        segments, joints3d = _build_posed_segments(scene, gender, bone_transforms)
 
         if not segments:
             return None
@@ -501,10 +617,12 @@ def render_glb_depth(scene_json: str, width: int, height: int, bone_transforms=N
         pr_scene.add(pyrender.Mesh.from_trimesh(mesh, smooth=True))
         centroid = mesh.centroid
         size     = float(np.linalg.norm(mesh.extents))
+        joints3d = None
 
     # ── Camera + light (shared by both paths) ─────────────────────────────────
+    yfov     = math.radians(45)
     cam_pose = _build_camera_pose(centroid, size, az, el)
-    camera   = pyrender.PerspectiveCamera(yfov=math.radians(45), aspectRatio=aspect)
+    camera   = pyrender.PerspectiveCamera(yfov=yfov, aspectRatio=aspect)
     pr_scene.add(camera, pose=cam_pose)
     pr_scene.add(pyrender.DirectionalLight(color=[1, 1, 1], intensity=3.0), pose=cam_pose)
 
@@ -532,4 +650,11 @@ def render_glb_depth(scene_json: str, width: int, height: int, bone_transforms=N
     def to_rgb(arr):
         return np.stack([arr, arr, arr], axis=-1).astype(np.float32) / 255.0
 
-    return to_rgb(depth_u8), to_rgb(canny_u8)
+    # OpenPose from the same posed GLB joints + same camera → overlays the mesh.
+    openpose_arr = None
+    if joints3d:
+        joints2d = _project_joints(joints3d, cam_pose, yfov, aspect, width, height)
+        if joints2d:
+            openpose_arr = _render_openpose_from_joints(joints2d, width, height)
+
+    return to_rgb(depth_u8), to_rgb(canny_u8), openpose_arr

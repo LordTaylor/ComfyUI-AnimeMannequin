@@ -147,23 +147,37 @@ class AnimeMannequinNode:
 
             rendered = _render_from_scene(scene_str, width, height)
             if rendered:
-                pose     = image_to_tensor(_dataurl_to_array(rendered["pose"],     width, height))
-                openpose = image_to_tensor(_dataurl_to_array(rendered["openpose"], width, height))
+                # headless_render.js uses FK convention: R arm at +X → right side of image
+                # (character viewed from behind).  The GLB renderer faces the camera
+                # (R arm on the LEFT).  Flip headless outputs horizontally when used as
+                # a fallback so they match the GLB front-facing convention.
+                def _flip_h(arr: np.ndarray) -> np.ndarray:
+                    return np.ascontiguousarray(arr[:, ::-1, :])
 
-                # Use GLB mesh renderer for depth/canny if pyrender is available
+                # Single source of truth: the GLB renderer produces depth, canny AND
+                # openpose from the SAME posed joints + same camera.  pose := depth and
+                # openpose overlays the mesh exactly — no second (FK) generator, no drift.
+                pose = depth = canny = openpose = None
                 if _GLB_RENDERER_OK:
                     bone_transforms = rendered.get("bones")
                     glb_result = render_glb_depth(scene_str, width, height, bone_transforms)
                     if glb_result is not None:
-                        depth_arr, canny_arr = glb_result
+                        depth_arr, canny_arr, openpose_arr = glb_result
                         depth = image_to_tensor(depth_arr)
                         canny = image_to_tensor(canny_arr)
-                    else:
-                        depth = image_to_tensor(_dataurl_to_array(rendered["depth"], width, height))
-                        canny = image_to_tensor(_dataurl_to_array(rendered["canny"], width, height))
-                else:
-                    depth = image_to_tensor(_dataurl_to_array(rendered["depth"], width, height))
-                    canny = image_to_tensor(_dataurl_to_array(rendered["canny"], width, height))
+                        pose  = depth  # cheat: pose identical to GLB depth
+                        if openpose_arr is not None:
+                            openpose = image_to_tensor(openpose_arr)
+
+                # Fallbacks (GLB unavailable / failed) — use flipped headless outputs.
+                if depth is None:
+                    depth = image_to_tensor(_flip_h(_dataurl_to_array(rendered["depth"], width, height)))
+                if canny is None:
+                    canny = image_to_tensor(_flip_h(_dataurl_to_array(rendered["canny"], width, height)))
+                if pose is None:
+                    pose = image_to_tensor(_flip_h(_dataurl_to_array(rendered["pose"], width, height)))
+                if openpose is None:
+                    openpose = image_to_tensor(_flip_h(_dataurl_to_array(rendered["openpose"], width, height)))
 
                 return (pose, depth, canny, openpose)
             # Rendering failed — fall through to file-based path
