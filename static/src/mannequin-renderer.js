@@ -4,18 +4,18 @@ import { buildSegments, computeBoneOffsets, WORLD_HEIGHT, OPENPOSE_COLORS, JOINT
 
 export const BUST_DEFAULTS = {
     // Position — Local  (bone-relative, offset scaled by growth = halfH*(s-1))
-    loc_x      :  0.18,  // X spread per unit of growth
-    loc_y      :  0.30,  // Y spread per unit of growth
-    loc_z      :  0.65,  // Z forward push per unit of growth
+    loc_x      :  0.1,  // X spread per unit of growth
+    loc_y      :  0.0,  // Y spread per unit of growth
+    loc_z      :  0.55,  // Z forward push per unit of growth
     loc_z_base :  0.00,  // Z constant base offset (independent of size)
     // Position — Global  (world-space, same for both breasts in same direction)
     glob_y_base:  0.00,  // world-Y constant separation (always, regardless of scale)
     glob_y     :  0.00,  // world-Y separation per (s-1)  — e.g. 0.05 → 5cm wider at s=2
     glob_z     :  0.20,  // world-Z sag per unit of growth (downward)
     // Rotation — Local  (bone-relative, angle in rad per (s-1), mirrors L/R)
-    rot_x      :  0.60,  // rotation around X (forward tilt)
-    rot_y      :  0.50,  // rotation around Y (left/right)
-    rot_z      : -0.50,  // rotation around Z (lateral tilt)
+    rot_x      :  0.050,  // rotation around X (forward tilt)
+    rot_y      :  -0.50,  // rotation around Y (left/right)
+    rot_z      : 0.750,  // rotation around Z (lateral tilt)
     // Rotation — Global  (world-space, same direction for both breasts, per (s-1))
     grot_x     :  0.00,  // global rotation around X
     grot_y     :  0.00,  // global rotation around Y
@@ -23,6 +23,9 @@ export const BUST_DEFAULTS = {
     // Scale
     scale_x    :  1.00,  // X scale multiplier (< 1 narrows each breast)
 };
+
+
+
 
 // COCO 18 limb connections — COCO standard (direct shoulder→elbow, hip→knee, etc.)
 // Colors per Openpose-18-keypoints_coco_color_codes_v13 (100 % brightness joint colors).

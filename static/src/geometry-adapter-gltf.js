@@ -90,6 +90,111 @@ const SEGMENT_PROPORTION_GROUP = {
 const _glbCache   = new Map(); // 'male'|'female' → Map<nodeName, THREE.Object3D>
 const _scaleCache = new Map(); // 'male'|'female' → { charScale, groundOffsetGLB, centerX, centerZ }
 
+// ── Custom GLB support ────────────────────────────────────────────────────────
+// When set, 'custom' is a valid gender value that bypasses the built-in assets.
+
+let _customGLB = null; // { nodeMap, meshMap, scaleInfo } | null
+
+/**
+ * Parse a GLB file (ArrayBuffer) and return a nodeMap.
+ * Call setCustomGLB(nodeMap) to activate it.
+ */
+export async function parseCustomGLB(arrayBuffer) {
+    const loader = new GLTFLoader();
+    const gltf   = await new Promise((resolve, reject) => {
+        loader.parse(arrayBuffer, '', resolve, reject);
+    });
+    gltf.scene.updateMatrixWorld(true);
+    const nodeMap = new Map();
+    gltf.scene.traverse(obj => {
+        const name = obj.userData.name || obj.name;
+        if (name) nodeMap.set(name, obj);
+    });
+    return nodeMap;
+}
+
+/**
+ * Activate a custom model. Automatically detects mesh-to-bone mapping by
+ * keyword matching on node names. Unmatched bones fall back to joints-only.
+ */
+export function setCustomGLB(nodeMap) {
+    const meshMap   = _autoDetectMeshMap(nodeMap);
+    const scaleInfo = _computeCustomScaleInfo(nodeMap);
+    _customGLB = { nodeMap, meshMap, scaleInfo };
+    const matched = Object.entries(meshMap).filter(([,v]) => v !== null).map(([k]) => k);
+    console.log(`[AnimeMannequin] Custom model — matched ${matched.length} bones:`, matched.join(', '));
+    const missed  = Object.entries(meshMap).filter(([,v]) => v === null).map(([k]) => k);
+    if (missed.length) console.log('[AnimeMannequin] Unmatched (joints only):', missed.join(', '));
+}
+
+/** Remove custom model — next buildMannequin call will use the built-in asset. */
+export function clearCustomGLB() {
+    _customGLB = null;
+}
+
+/** Returns true when a custom model is currently active. */
+export function hasCustomGLB() {
+    return _customGLB !== null;
+}
+
+// Keyword lists for auto mesh detection — order matters (first match wins).
+const _BONE_KEYWORDS = {
+    torso:       null,
+    head:        ['head'],
+    neck:        ['neck'],
+    spine:       ['spine', 'belly', 'abdomen'],
+    chest:       ['chest', 'trunk', 'upperbody', 'upper_body'],
+    pelvis:      ['pelvis', 'hip'],
+    shoulder_L:  ['shoulder_l', 'shoulder.l', 'l_shoulder', 'shoulderl'],
+    upper_arm_L: ['upper_arm_l', 'upperarm_l', 'arm_upper_l', 'l_upper_arm', 'l_arm'],
+    forearm_L:   ['forearm_l', 'arm_lower_l', 'lowerarm_l', 'l_forearm'],
+    hand_L:      ['hand_l', 'hand.l', 'l_hand'],
+    shoulder_R:  ['shoulder_r', 'shoulder.r', 'r_shoulder', 'shoulderr'],
+    upper_arm_R: ['upper_arm_r', 'upperarm_r', 'arm_upper_r', 'r_upper_arm', 'r_arm'],
+    forearm_R:   ['forearm_r', 'arm_lower_r', 'lowerarm_r', 'r_forearm'],
+    hand_R:      ['hand_r', 'hand.r', 'r_hand'],
+    thigh_L:     ['thigh_l', 'leg_upper_l', 'upperleg_l', 'thigh.l', 'l_thigh'],
+    shin_L:      ['shin_l', 'leg_lower_l', 'lowerleg_l', 'calf_l', 'l_shin'],
+    foot_L:      ['foot_l', 'foot.l', 'l_foot'],
+    thigh_R:     ['thigh_r', 'leg_upper_r', 'upperleg_r', 'thigh.r', 'r_thigh'],
+    shin_R:      ['shin_r', 'leg_lower_r', 'lowerleg_r', 'calf_r', 'r_shin'],
+    foot_R:      ['foot_r', 'foot.r', 'r_foot'],
+};
+
+function _autoDetectMeshMap(nodeMap) {
+    const result = {};
+    for (const [bone, keywords] of Object.entries(_BONE_KEYWORDS)) {
+        if (keywords === null) { result[bone] = null; continue; }
+        let found = null;
+        for (const [name] of nodeMap) {
+            const lower = name.toLowerCase();
+            if (keywords.some(kw => lower.includes(kw))) { found = name; break; }
+        }
+        result[bone] = found;
+    }
+    return result;
+}
+
+function _computeCustomScaleInfo(nodeMap) {
+    const bbox = new THREE.Box3();
+    for (const [, obj] of nodeMap) {
+        if (obj.isMesh) bbox.expandByObject(obj);
+    }
+    if (bbox.isEmpty()) {
+        bbox.set(new THREE.Vector3(-0.5, 0, -0.5), new THREE.Vector3(0.5, 2, 0.5));
+    }
+    const size   = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    bbox.getSize(size);
+    bbox.getCenter(center);
+    return {
+        charScale:      size.y > 0.1 ? WORLD_HEIGHT / size.y : 1.0,
+        groundOffsetGLB: -bbox.min.y,
+        centerX:        center.x,
+        centerZ:        center.z,
+    };
+}
+
 // Map our bone names to GLB node names.
 // torso is a virtual root (no geometry), maps to null.
 export const MESH_MAP = {
@@ -140,6 +245,7 @@ export const MESH_MAP = {
 };
 
 async function loadGLB(gender) {
+    if (gender === 'custom') return _customGLB?.nodeMap ?? new Map();
     const key = gender === 'F' ? 'female' : 'male';
     if (_glbCache.has(key)) return _glbCache.get(key);
     const loader = new GLTFLoader();
@@ -164,6 +270,9 @@ async function loadGLB(gender) {
  *   centerX/Z    — subtract from GLB world X/Z to center character at X=0, Z=0
  */
 async function getCharacterScaleInfo(gender) {
+    if (gender === 'custom') {
+        return _customGLB?.scaleInfo ?? { charScale: 1, groundOffsetGLB: 0, centerX: 0, centerZ: 0 };
+    }
     const key = gender === 'F' ? 'female' : 'male';
     if (_scaleCache.has(key)) return _scaleCache.get(key);
 
@@ -210,9 +319,10 @@ export function makeToonMat(color) {
  * the A-pose is reproduced correctly when all bone quaternions are identity.
  */
 export async function buildSegments(gender) {
-    const key = gender === 'F' ? 'female' : 'male';
-    const boneMap = MESH_MAP[key];
-    const nodeMap = await loadGLB(gender);
+    const isCustom = gender === 'custom';
+    const key      = isCustom ? null : (gender === 'F' ? 'female' : 'male');
+    const boneMap  = isCustom ? (_customGLB?.meshMap ?? {}) : MESH_MAP[key];
+    const nodeMap  = await loadGLB(gender);
     const { charScale } = await getCharacterScaleInfo(gender);
     const groups = new Map();
 
@@ -277,8 +387,8 @@ export async function buildSegments(gender) {
             }
         }
 
-        // Add extra sub-meshes (breasts, ears, eyes, nose)
-        const extras = (EXTRA_NODES[key]?.[boneName]) ?? [];
+        // Add extra sub-meshes (breasts, ears, eyes, nose) — built-in models only
+        const extras = isCustom ? [] : ((EXTRA_NODES[key]?.[boneName]) ?? []);
         for (const { name: extraName, proportionGroup: extraPG } of extras) {
             const extraNode = nodeMap.get(extraName);
             if (!extraNode) continue;
@@ -342,9 +452,10 @@ export async function buildSegments(gender) {
  *   - scaled by charScale (WORLD_HEIGHT / actual GLB character height)
  */
 export async function computeBoneOffsets(gender) {
-    const key = gender === 'F' ? 'female' : 'male';
-    const boneMap = MESH_MAP[key];
-    const nodeMap = await loadGLB(gender);
+    const isCustom = gender === 'custom';
+    const key      = isCustom ? null : (gender === 'F' ? 'female' : 'male');
+    const boneMap  = isCustom ? (_customGLB?.meshMap ?? {}) : MESH_MAP[key];
+    const nodeMap  = await loadGLB(gender);
     const { charScale, groundOffsetGLB, centerX, centerZ } = await getCharacterScaleInfo(gender);
     const offsets = new Map();
 

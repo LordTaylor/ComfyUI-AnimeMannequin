@@ -1,5 +1,5 @@
-import { defaultProportions } from './mannequin-model.js';
-import { SetProportionsCommand } from './commands.js';
+import { defaultProportions } from '../mannequin-model.js';
+import { SetProportionsCommand } from '../commands.js';
 
 const SLIDERS = [
     { key: 'head',  label: 'Head',  min: 0.5,  max: 1.5,  step: 0.01 },

@@ -1,5 +1,5 @@
-import { BUST_DEFAULTS } from './mannequin-renderer.js';
-import { SetBustCfgCommand } from './commands.js';
+import { BUST_DEFAULTS } from '../mannequin-renderer.js';
+import { SetBustCfgCommand } from '../commands.js';
 
 /**
  * Floating debug panel for live-tweaking bust config parameters.
@@ -84,10 +84,32 @@ export class BustDebugPanel {
         const copyBtn = mkBtn('Copy as JS', () => {
             const cfg   = this._store.getState().bustCfg;
             const lines = Object.entries(cfg).map(([k, v]) => `    ${k.padEnd(9)}: ${v},`).join('\n');
-            navigator.clipboard?.writeText(`{\n${lines}\n}`).then(() => {
-                copyBtn.textContent = 'Copied!';
+            const text  = `{\n${lines}\n}`;
+
+            const finish = ok => {
+                copyBtn.textContent = ok ? 'Copied!' : 'Clipboard error';
                 setTimeout(() => { copyBtn.textContent = 'Copy as JS'; }, 1200);
-            }).catch(() => { copyBtn.textContent = 'Clipboard error'; });
+            };
+
+            // Primary: async Clipboard API (works in standalone / secure context)
+            if (navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(text).then(() => finish(true)).catch(() => execCopy());
+            } else {
+                execCopy();
+            }
+
+            // Fallback: execCommand via hidden textarea (works inside iframe/ComfyUI)
+            function execCopy() {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                const ok = document.execCommand('copy');
+                ta.remove();
+                finish(ok);
+            }
         });
 
         // ── Sliders organised by section ───────────────────────────────────────

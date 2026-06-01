@@ -16,7 +16,7 @@ vi.mock('../../static/src/mannequin-model.js', () => ({
 
 const { AppStore, defaultState } = await import('../../static/src/app-store.js');
 const { CommandHistory }         = await import('../../static/src/commands.js');
-const { ProportionsPanel }       = await import('../../static/src/proportions-panel.js');
+const { ProportionsPanel }       = await import('../../static/src/panels/proportions-panel.js');
 
 function mkPanel() {
     const store   = new AppStore(defaultState('F'));

@@ -235,22 +235,20 @@ app.registerExtension({
             img.style.cssText = [
                 "margin:2px 8px 4px 8px",
                 "border-radius:4px", "display:block",
-                "background:#111", "object-fit:cover",
+                "background:#111", "object-fit:contain",
                 "box-sizing:border-box",
             ].join(";");
             img.alt = "No pose captured yet";
             this._thumbnailImg = img;
+            const THUMB_H = 200;
             this.addDOMWidget("thumbnail", "thumbnail", img, {
                 getValue() { return ""; }, setValue() {},
-                // width + height set explicitly — calc(100%) is broken in LiteGraph DOM widgets
+                // Fixed height — node size stays stable when width/height widgets change
                 computeSize(width) {
-                    const nw   = Math.max((width ?? self.size?.[0] ?? 256) - 16, 64);
-                    const outW = self.widgets?.find(w => w.name === "width")?.value  ?? 768;
-                    const outH = self.widgets?.find(w => w.name === "height")?.value ?? 1024;
-                    const h    = Math.round(nw * (outH / outW));
+                    const nw = Math.max((width ?? self.size?.[0] ?? 256) - 16, 64);
                     img.style.width  = nw + "px";
-                    img.style.height = h  + "px";
-                    return [0, h + 6];  // +6 for top/bottom margin
+                    img.style.height = THUMB_H + "px";
+                    return [0, THUMB_H + 6];  // +6 for top/bottom margin
                 },
                 serialize: false,
             });
@@ -266,30 +264,17 @@ app.registerExtension({
             // Without this, btn and img stay at the width from the last computeSize() call.
             this.onResize = function (size) {
                 const nw = Math.max((size?.[0] ?? 256) - 16, 64);
-                btn.style.width = nw + "px";
-                const outW = self.widgets?.find(w => w.name === "width")?.value  ?? 768;
-                const outH = self.widgets?.find(w => w.name === "height")?.value ?? 1024;
+                btn.style.width  = nw + "px";
                 img.style.width  = nw + "px";
-                img.style.height = Math.round(nw * (outH / outW)) + "px";
+                img.style.height = THUMB_H + "px";
             };
 
-            // When output width or height changes, recalculate thumbnail height to keep aspect ratio locked
-            this.onWidgetChanged = function (name, value) {
-                if (name !== "width" && name !== "height") return;
-                // Use the incoming `value` for the changed widget; read the other from widgets
-                const outW = name === "width"  ? value : (self.widgets?.find(w => w.name === "width")?.value  ?? 768);
-                const outH = name === "height" ? value : (self.widgets?.find(w => w.name === "height")?.value ?? 1024);
-                if (!outW || !outH) return;
-                // Update thumbnail height directly so it reacts immediately
-                const nodeW = Math.max((self.size?.[0] ?? 256) - 16, 64);
-                const h = Math.round(nodeW * (outH / outW));
-                if (self._thumbnailImg) self._thumbnailImg.style.height = h + "px";
-                // Force LiteGraph to recompute node layout (picks up new computeSize heights)
-                queueMicrotask(() => {
-                    try { self.setSize(self.computeSize()); } catch { /* ignore */ }
-                    app.graph.setDirtyCanvas(true, true);
-                });
-            };
+            // Force LiteGraph to recalculate node height after all widgets are added.
+            // Without this the node is too short and the thumbnail overflows the bottom edge.
+            queueMicrotask(() => {
+                try { self.setSize(self.computeSize()); } catch { /* ignore */ }
+                app.graph?.setDirtyCanvas(true, true);
+            });
         };
     },
 });

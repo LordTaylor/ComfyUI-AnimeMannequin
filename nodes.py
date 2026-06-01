@@ -24,7 +24,7 @@ class AnimeMannequinNode:
     RETURN_NAMES  = ("pose", "depth", "canny", "openpose")
     FUNCTION      = "get_outputs"
     CATEGORY      = "AnimeMannequin"
-    OUTPUT_NODE   = False
+    OUTPUT_NODE   = True
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):

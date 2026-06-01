@@ -1,4 +1,4 @@
-import { SetBgImageCommand, SetCropFrameCfgCommand } from './commands.js';
+import { SetBgImageCommand, SetCropFrameCfgCommand } from '../commands.js';
 
 /**
  * Floating "Overlays" panel — reference background image + crop frame style.
