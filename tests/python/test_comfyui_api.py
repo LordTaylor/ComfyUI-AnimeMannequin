@@ -75,19 +75,52 @@ def _wait_for_prompt(prompt_id: str) -> dict:
 
 def _minimal_workflow(width: int = 64, height: int = 64, gender: str = 'F') -> dict:
     """
-    Minimal workflow: just the AnimeMannequinNode, no downstream nodes.
-    All optional file inputs omitted → node returns black images.
+    Minimal workflow: AnimeMannequinNode only, no SaveImage.
+    Used to verify execution succeeds — outputs dict will be empty without SaveImage.
     """
     return {
         '1': {
             'class_type': 'AnimeMannequinNode',
-            'inputs': {
-                'width':  width,
-                'height': height,
-                'gender': gender,
-            },
+            'inputs': {'width': width, 'height': height, 'gender': gender},
         },
     }
+
+
+def _scene_workflow(width: int = 64, height: int = 64, gender: str = 'F',
+                    scene: str = '') -> dict:
+    """
+    Full workflow: AnimeMannequinNode + 4 SaveImage nodes.
+    Renders from scene JSON server-side via headless_render.js.
+    """
+    if not scene:
+        scene = json.dumps({
+            'version': '1.0', 'gender': gender, 'bones': {},
+            'camera': {'azimuth': 0, 'elevation': 5, 'distance': 2.5},
+            'proportions': {'head': 1, 'bust': 1, 'hips': 1,
+                            'waist': 1, 'legs': 1, 'arms': 1},
+        })
+    return {
+        '1': {'class_type': 'AnimeMannequinNode',
+              'inputs': {'width': width, 'height': height,
+                         'gender': gender, 'scene': scene}},
+        '2': {'class_type': 'SaveImage',
+              'inputs': {'images': ['1', 0], 'filename_prefix': 'api_pose'}},
+        '3': {'class_type': 'SaveImage',
+              'inputs': {'images': ['1', 1], 'filename_prefix': 'api_depth'}},
+        '4': {'class_type': 'SaveImage',
+              'inputs': {'images': ['1', 2], 'filename_prefix': 'api_canny'}},
+        '5': {'class_type': 'SaveImage',
+              'inputs': {'images': ['1', 3], 'filename_prefix': 'api_openpose'}},
+    }
+
+
+def _first_saved_image(outputs: dict):
+    """Return first image descriptor from any SaveImage node in outputs."""
+    for nout in outputs.values():
+        imgs = nout.get('images', [])
+        if imgs:
+            return imgs[0]
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -149,97 +182,90 @@ class TestEditorServed:
 
 
 class TestAPIExecution:
-    """Submit a real workflow via /prompt and verify outputs."""
+    """Submit real workflows via /prompt and verify outputs."""
 
     def test_workflow_executes_without_error(self):
-        """No exception → execution completed normally."""
-        pid = _submit_workflow(_minimal_workflow(64, 64))
-        result = _wait_for_prompt(pid)
-        # ComfyUI stores errors under 'error' key if execution failed
-        assert result.get('error') is None, f"Execution error: {result.get('error')}"
-
-    def test_outputs_contain_four_images(self):
-        """Four IMAGE outputs are present in history."""
+        """Bare node (no SaveImage, no scene) executes without error."""
         pid    = _submit_workflow(_minimal_workflow(64, 64))
         result = _wait_for_prompt(pid)
+        assert result.get('error') is None, f"Execution error: {result.get('error')}"
+
+    def test_scene_json_produces_four_saved_images(self):
+        """scene JSON → headless render → 4 SaveImage outputs in history."""
+        pid    = _submit_workflow(_scene_workflow(64, 96, 'F'))
+        result = _wait_for_prompt(pid)
         outputs = result.get('outputs', {})
-        assert '1' in outputs, 'Node 1 has no outputs in history'
-        node_out = outputs['1']
-        # Each output channel is a list of image descriptors
-        for ch in ('pose', 'depth', 'canny', 'openpose'):
-            assert ch in node_out or 'images' in node_out, (
-                f"Output channel '{ch}' missing — got keys: {list(node_out.keys())}"
-            )
+        # nodes 2-5 are SaveImage — each should have one image entry
+        saved = [v for k, v in outputs.items() if k in ('2', '3', '4', '5')]
+        assert len(saved) == 4, f'Expected 4 SaveImage outputs, got {len(saved)}'
+        for node_out in saved:
+            assert node_out.get('images'), f'SaveImage node produced no images: {node_out}'
 
     @pytest.mark.parametrize('width,height,gender', [
         (64,  128, 'F'),
         (128,  64, 'M'),
         (256, 256, 'F'),
     ])
-    def test_outputs_have_correct_dimensions(self, width, height, gender, tmp_path):
-        """
-        Download the pose output image and verify its pixel dimensions match
-        the requested width×height.
-        """
+    def test_scene_outputs_have_correct_dimensions(self, width, height, gender):
+        """Rendered images must match requested width × height."""
         from PIL import Image as PILImage
 
-        pid    = _submit_workflow(_minimal_workflow(width, height, gender))
+        pid    = _submit_workflow(_scene_workflow(width, height, gender))
         result = _wait_for_prompt(pid)
-        outputs = result.get('outputs', {}).get('1', {})
+        img_desc = _first_saved_image(result.get('outputs', {}))
+        assert img_desc, 'No saved image found in outputs'
 
-        # ComfyUI may return output images under 'images' list or per-name keys
-        imgs = outputs.get('images', [])
-        if not imgs:
-            # Try to find any list value that looks like image descriptors
-            for v in outputs.values():
-                if isinstance(v, list) and v and isinstance(v[0], dict) and 'filename' in v[0]:
-                    imgs = v
-                    break
-
-        assert imgs, f'No image descriptors found in outputs: {outputs}'
-        fname = imgs[0]['filename']
-        subfolder = imgs[0].get('subfolder', '')
-        ftype = imgs[0].get('type', 'output')
-
-        url = f'{COMFYUI_URL}/view?filename={fname}&subfolder={subfolder}&type={ftype}'
+        url = (f'{COMFYUI_URL}/view?filename={img_desc["filename"]}'
+               f'&subfolder={img_desc.get("subfolder","")}'
+               f'&type={img_desc.get("type","output")}')
         with urllib.request.urlopen(url, timeout=10) as r:
-            img_bytes = r.read()
+            img = PILImage.open(io.BytesIO(r.read()))
+        assert img.width  == width,  f'width:  expected {width},  got {img.width}'
+        assert img.height == height, f'height: expected {height}, got {img.height}'
 
-        img = PILImage.open(io.BytesIO(img_bytes))
-        assert img.width  == width,  f'Expected width={width},  got {img.width}'
-        assert img.height == height, f'Expected height={height}, got {img.height}'
-
-    def test_api_without_files_returns_black_images(self, tmp_path):
+    def test_scene_renders_non_black_pose(self):
         """
-        The current limitation: submitting via API without the editor
-        means no PNG files were uploaded → all outputs are black.
-        This test documents and verifies the graceful degradation.
+        Pose image rendered from scene JSON must NOT be all-black.
+        Verifies the headless renderer actually produced content.
         """
         from PIL import Image as PILImage
         import numpy as np
 
-        pid    = _submit_workflow(_minimal_workflow(64, 64, 'F'))
+        pid    = _submit_workflow(_scene_workflow(128, 192, 'F'))
         result = _wait_for_prompt(pid)
-        outputs = result.get('outputs', {}).get('1', {})
+        # Node 2 = SaveImage for pose (first output channel)
+        pose_out = result.get('outputs', {}).get('2', {})
+        imgs = pose_out.get('images', [])
+        assert imgs, 'No pose image in outputs'
 
-        imgs = outputs.get('images', [])
-        if not imgs:
-            for v in outputs.values():
-                if isinstance(v, list) and v and isinstance(v[0], dict) and 'filename' in v[0]:
-                    imgs = v
-                    break
-
-        assert imgs, 'No images in output'
-        fname = imgs[0]['filename']
-        ftype = imgs[0].get('type', 'output')
-        url = f'{COMFYUI_URL}/view?filename={fname}&subfolder=&type={ftype}'
+        url = (f'{COMFYUI_URL}/view?filename={imgs[0]["filename"]}'
+               f'&subfolder=&type={imgs[0].get("type","output")}')
         with urllib.request.urlopen(url, timeout=10) as r:
-            img_bytes = r.read()
-
-        img = PILImage.open(io.BytesIO(img_bytes)).convert('RGB')
+            img = PILImage.open(io.BytesIO(r.read())).convert('RGB')
         arr = np.array(img)
-        assert arr.max() == 0, (
-            f'Expected all-black image (no files uploaded), '
-            f'got max pixel={arr.max()}. '
-            'If server-side rendering is implemented, update this test.'
-        )
+        assert arr.max() > 0, 'Pose image is all-black — headless renderer failed'
+
+    def test_no_scene_no_files_returns_black(self):
+        """
+        Without scene JSON and without pre-uploaded files, outputs are black.
+        Graceful degradation — no crash.
+        """
+        from PIL import Image as PILImage
+        import numpy as np
+
+        wf = {
+            '1': {'class_type': 'AnimeMannequinNode',
+                  'inputs': {'width': 64, 'height': 64, 'gender': 'F'}},
+            '2': {'class_type': 'SaveImage',
+                  'inputs': {'images': ['1', 0], 'filename_prefix': 'black_test'}},
+        }
+        pid    = _submit_workflow(wf)
+        result = _wait_for_prompt(pid)
+        img_desc = _first_saved_image(result.get('outputs', {}))
+        assert img_desc, 'No output image'
+
+        url = (f'{COMFYUI_URL}/view?filename={img_desc["filename"]}'
+               f'&subfolder=&type={img_desc.get("type","output")}')
+        with urllib.request.urlopen(url, timeout=10) as r:
+            img = PILImage.open(io.BytesIO(r.read())).convert('RGB')
+        assert np.array(img).max() == 0, 'Expected black image without scene/files'

@@ -219,26 +219,23 @@ class TestPathTraversal:
 
 class TestAPIScenarioDocumentation:
     """
-    These tests document the current limitation:
-    submitting a ComfyUI workflow via the HTTP API without opening the editor
-    produces black outputs because no PNG files have been uploaded.
-
-    Future work: add a `scene` STRING input and implement server-side rendering
-    so that workflows submitted with a scene JSON produce correct images.
+    Tests for the API flow:
+    - With scene JSON → headless_render.js produces images (tested in integration tests)
+    - Without scene AND without files → graceful black fallback
     """
 
-    def test_node_has_no_scene_input_yet(self):
+    def test_node_has_scene_input(self):
         """
-        Confirms that `scene` is NOT yet a recognised input.
-        When server-side rendering is implemented, this test should be removed
-        and replaced with TestServerSideRendering (not yet written).
+        `scene` is registered as an optional STRING input.
+        Server-side rendering via headless_render.js is implemented.
         """
         it = AnimeMannequinNode.INPUT_TYPES()
         all_inputs = {**it.get('required', {}), **it.get('optional', {})}
-        assert 'scene' not in all_inputs, (
-            "Server-side scene rendering is implemented — "
-            "remove this placeholder test and add real rendering tests."
+        assert 'scene' in all_inputs, (
+            "'scene' input missing — server-side rendering not wired up in INPUT_TYPES"
         )
+        assert all_inputs['scene'][0] == 'STRING', \
+            f"Expected scene to be STRING, got {all_inputs['scene'][0]}"
 
     def test_api_flow_without_files_returns_black(self, tmp_path):
         """
