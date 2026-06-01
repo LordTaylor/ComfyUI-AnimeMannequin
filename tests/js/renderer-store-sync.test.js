@@ -98,8 +98,8 @@ vi.mock('../../static/src/mannequin-model.js', () => ({
 }));
 
 vi.mock('../../static/src/mannequin-renderer.js', () => ({
-    BUST_DEFAULTS: { baseFwd:0, fwdPush:0.65, droop:0.2, latX:0.18, latY:0.3, spread:0.0,
-                     rotFwd:0.6, rotLat:-0.5, rotY:0.5, xSqueeze:1.0 },
+    BUST_DEFAULTS: { loc_z_base:0, loc_z:0.65, glob_z:0.2, loc_x:0.18, loc_y:0.3, glob_y:0.0,
+                     rot_x:0.6, rot_z:-0.5, rot_y:0.5, scale_x:1.0 },
     MannequinRenderer: vi.fn(),  // not testing Three.js internals here
 }));
 
@@ -118,12 +118,12 @@ describe('AppStore — store subscription protocol (renderer-facing API)', () =>
         s.subscribe(state => received.push({ ...state }));
 
         s.setState({ jointColorMode: 'flat' });
-        s.setBustCfg({ latY: 0.9 });
+        s.setBustCfg({ loc_y: 0.9 });
         s.setProportions({ bust: 1.5 });
 
         expect(received).toHaveLength(3);
         expect(received[0].jointColorMode).toBe('flat');
-        expect(received[1].bustCfg.latY).toBe(0.9);
+        expect(received[1].bustCfg.loc_y).toBe(0.9);
         expect(received[2].proportions.bust).toBe(1.5);
     });
 
@@ -135,7 +135,7 @@ describe('AppStore — store subscription protocol (renderer-facing API)', () =>
         // Change only jointColorMode
         s.setState({ jointColorMode: 'flat' });
         // Change bustCfg
-        s.setBustCfg({ latY: 0.9 });
+        s.setBustCfg({ loc_y: 0.9 });
 
         // proportions reference should differ between 0 and 1 (new state obj each time)
         // but the nested proportions object should still be the same if untouched
@@ -145,11 +145,11 @@ describe('AppStore — store subscription protocol (renderer-facing API)', () =>
     it('setBustCfg preserves all other keys in bustCfg', () => {
         const s = mkStore();
         const orig = s.getState().bustCfg;
-        s.setBustCfg({ latY: 0.9 });
+        s.setBustCfg({ loc_y: 0.9 });
         const updated = s.getState().bustCfg;
-        expect(updated.fwdPush).toBe(orig.fwdPush);
-        expect(updated.droop).toBe(orig.droop);
-        expect(updated.rotFwd).toBe(orig.rotFwd);
+        expect(updated.loc_z).toBe(orig.loc_z);
+        expect(updated.glob_z).toBe(orig.glob_z);
+        expect(updated.rot_x).toBe(orig.rot_x);
     });
 
     it('setProportions preserves all other proportion fields', () => {
@@ -176,7 +176,7 @@ describe('AppStore — store subscription protocol (renderer-facing API)', () =>
         const spy = vi.fn();
         const unsub = s.subscribe(spy);
         unsub();
-        s.setBustCfg({ latY: 0.9 });
+        s.setBustCfg({ loc_y: 0.9 });
         s.setProportions({ bust: 2 });
         expect(spy).not.toHaveBeenCalled();
     });
@@ -241,9 +241,9 @@ describe('Commands use specific setters', () => {
         const { SetBustCfgCommand } = await import('../../static/src/commands.js');
         const s = mkStore();
         const prev = s.getState().bustCfg;
-        new SetBustCfgCommand(prev, { ...prev, latY: 0.9 }).execute(s);
-        expect(s.getState().bustCfg.latY).toBe(0.9);
-        expect(s.getState().bustCfg.fwdPush).toBe(prev.fwdPush);
+        new SetBustCfgCommand(prev, { ...prev, loc_y: 0.9 }).execute(s);
+        expect(s.getState().bustCfg.loc_y).toBe(0.9);
+        expect(s.getState().bustCfg.loc_z).toBe(prev.loc_z);
     });
 
     it('RandomPoseCommand throws on missing pose', async () => {

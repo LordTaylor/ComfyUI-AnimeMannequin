@@ -90,61 +90,92 @@ export class BustDebugPanel {
             }).catch(() => { copyBtn.textContent = 'Clipboard error'; });
         });
 
-        // ── Sliders ────────────────────────────────────────────────────────────
-        const FIELDS = [
-            { key: 'baseFwd',  min: -0.2, max:  0.2,  step: 0.01 },
-            { key: 'fwdPush',  min: -2.0, max:  2.0,  step: 0.05 },
-            { key: 'droop',    min: -1.0, max:  1.0,  step: 0.05 },
-            { key: 'spread',   min:  0.0, max:  0.3,  step: 0.005 }, // ← world horizontal spread
-            { key: 'latX',     min: -1.0, max:  1.0,  step: 0.05 },
-            { key: 'latY',     min: -1.0, max:  1.0,  step: 0.05 },
-            { key: 'rotFwd',   min: -2.0, max:  2.0,  step: 0.05 },
-            { key: 'rotLat',   min: -2.0, max:  2.0,  step: 0.05 },
-            { key: 'rotY',     min: -2.0, max:  2.0,  step: 0.05 },
-            { key: 'xSqueeze', min:  0.1, max:  2.0,  step: 0.05 },
+        // ── Sliders organised by section ───────────────────────────────────────
+        const SECTIONS = [
+            {
+                label: 'Position — Local',
+                fields: [
+                    { key: 'loc_x',      label: 'X',      min: -1.0, max:  1.0,  step: 0.05  },
+                    { key: 'loc_y',      label: 'Y',      min: -1.0, max:  1.0,  step: 0.05  },
+                    { key: 'loc_z',      label: 'Z',      min: -2.0, max:  2.0,  step: 0.05  },
+                    { key: 'loc_z_base', label: 'Z base', min: -0.2, max:  0.2,  step: 0.01  },
+                ],
+            },
+            {
+                label: 'Position — Global',
+                fields: [
+                    { key: 'glob_y', label: 'Y', min:  0.0, max:  0.3,  step: 0.005 },
+                    { key: 'glob_z', label: 'Z', min: -1.0, max:  1.0,  step: 0.05  },
+                ],
+            },
+            {
+                label: 'Rotation — Local',
+                fields: [
+                    { key: 'rot_x', label: 'X', min: -2.0, max: 2.0, step: 0.05 },
+                    { key: 'rot_y', label: 'Y', min: -2.0, max: 2.0, step: 0.05 },
+                    { key: 'rot_z', label: 'Z', min: -2.0, max: 2.0, step: 0.05 },
+                ],
+            },
+            {
+                label: 'Scale',
+                fields: [
+                    { key: 'scale_x', label: 'X', min: 0.1, max: 2.0, step: 0.05 },
+                ],
+            },
         ];
 
-        for (const { key, min, max, step } of FIELDS) {
-            const row = document.createElement('div');
-            row.style.cssText = 'display:flex;align-items:center;gap:4px;margin:3px 0;';
+        const mkSectionHeader = label => {
+            const d = document.createElement('div');
+            d.style.cssText = 'font-size:10px;color:#7cf;border-top:1px solid #444;margin:7px 0 3px;padding-top:4px;font-weight:bold;';
+            d.textContent = label;
+            panel.appendChild(d);
+        };
 
-            const lbl = document.createElement('span');
-            lbl.textContent = key;
-            lbl.style.cssText = 'width:64px;flex-shrink:0;color:#aaa;';
-            row.appendChild(lbl);
+        for (const { label, fields } of SECTIONS) {
+            mkSectionHeader(label);
 
-            const slider = document.createElement('input');
-            slider.type = 'range';
-            slider.min = min; slider.max = max; slider.step = step;
-            slider.value = this._store.getState().bustCfg[key] ?? BUST_DEFAULTS[key];
-            slider.style.cssText = 'flex:1;cursor:pointer;';
+            for (const { key, label: lbl, min, max, step } of fields) {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex;align-items:center;gap:4px;margin:3px 0;';
 
-            const num = document.createElement('input');
-            num.type = 'number';
-            num.min = min; num.max = max; num.step = step;
-            num.value = slider.value;
-            num.style.cssText = 'width:52px;background:#333;color:#eee;border:1px solid #555;border-radius:3px;padding:1px 3px;font-size:10px;';
+                const lblEl = document.createElement('span');
+                lblEl.textContent = lbl;
+                lblEl.style.cssText = 'width:44px;flex-shrink:0;color:#aaa;';
+                row.appendChild(lblEl);
 
-            // Live update via slider (no history entry — too noisy while dragging)
-            slider.addEventListener('input', () => {
-                const v = parseFloat(slider.value);
-                num.value = v;
-                this._store.setBustCfg({ [key]: v });
-            });
+                const slider = document.createElement('input');
+                slider.type = 'range';
+                slider.min = min; slider.max = max; slider.step = step;
+                slider.value = this._store.getState().bustCfg[key] ?? BUST_DEFAULTS[key];
+                slider.style.cssText = 'flex:1;cursor:pointer;';
 
-            // Commit to history on slider release and number change
-            slider.addEventListener('change', () => this._commitBustChange(key, parseFloat(slider.value)));
-            num.addEventListener('change', () => {
-                const v = parseFloat(num.value);
-                if (isNaN(v)) return;
-                slider.value = v;
-                this._commitBustChange(key, v);
-            });
+                const num = document.createElement('input');
+                num.type = 'number';
+                num.min = min; num.max = max; num.step = step;
+                num.value = slider.value;
+                num.style.cssText = 'width:52px;background:#333;color:#eee;border:1px solid #555;border-radius:3px;padding:1px 3px;font-size:10px;';
 
-            row.appendChild(slider);
-            row.appendChild(num);
-            panel.appendChild(row);
-            this._inputs[key] = { slider, num };
+                // Live update via slider (no history entry — too noisy while dragging)
+                slider.addEventListener('input', () => {
+                    const v = parseFloat(slider.value);
+                    num.value = v;
+                    this._store.setBustCfg({ [key]: v });
+                });
+
+                // Commit to history on slider release and number change
+                slider.addEventListener('change', () => this._commitBustChange(key, parseFloat(slider.value)));
+                num.addEventListener('change', () => {
+                    const v = parseFloat(num.value);
+                    if (isNaN(v)) return;
+                    slider.value = v;
+                    this._commitBustChange(key, v);
+                });
+
+                row.appendChild(slider);
+                row.appendChild(num);
+                panel.appendChild(row);
+                this._inputs[key] = { slider, num };
+            }
         }
 
         // ── Subscribe to store for external changes ───────────────────────────

@@ -60,8 +60,8 @@ vi.mock('../../static/src/mannequin-model.js', () => ({
 }));
 
 vi.mock('../../static/src/mannequin-renderer.js', () => ({
-    BUST_DEFAULTS: { baseFwd:0, fwdPush:0.65, droop:0.2, latX:0.18, latY:0.3, spread:0.0,
-                     rotFwd:0.6, rotLat:-0.5, rotY:0.5, xSqueeze:1.0 },
+    BUST_DEFAULTS: { loc_z_base:0, loc_z:0.65, glob_z:0.2, loc_x:0.18, loc_y:0.3, glob_y:0.0,
+                     rot_x:0.6, rot_z:-0.5, rot_y:0.5, scale_x:1.0 },
 }));
 
 const { AppStore, defaultState } = await import('../../static/src/app-store.js');

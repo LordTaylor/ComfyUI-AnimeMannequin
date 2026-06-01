@@ -11,10 +11,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../static/src/mannequin-renderer.js', () => ({
     BUST_DEFAULTS: {
-        baseFwd: 0, fwdPush: 0.65, droop: 0.2,
-        latX: 0.18, latY: 0.3,
-        rotFwd: 0.6, rotLat: -0.5, rotY: 0.5,
-        xSqueeze: 1.0,
+        loc_z_base: 0, loc_z: 0.65, glob_z: 0.2,
+        loc_x: 0.18, loc_y: 0.3,
+        rot_x: 0.6, rot_z: -0.5, rot_y: 0.5,
+        scale_x: 1.0,
     },
 }));
 

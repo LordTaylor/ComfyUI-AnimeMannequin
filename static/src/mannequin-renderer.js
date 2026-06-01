@@ -3,18 +3,20 @@ import { BONE_NAMES, BONE_CHILDREN, defaultScene, jsonToScene, defaultProportion
 import { buildSegments, computeBoneOffsets, WORLD_HEIGHT, OPENPOSE_COLORS, JOINT_COLOR } from './geometry-adapter-gltf.js';
 
 export const BUST_DEFAULTS = {
-    baseFwd  : 0.00,   // constant forward offset at s=1
-    fwdPush  : 0.65,   // forward push per unit of growth (halfH*(s-1))
-    droop    : 0.20,   // downward droop per unit of growth
-    latX     : 0.18,   // local-X spread per unit of growth
-    latY     : 0.30,   // local-Y spread per unit of growth
-    spread   : 0.00,   // world horizontal spread: direct world-units per (s-1)
-                       //   local Y = world left/right in chest-bone space
-                       //   e.g. spread=0.05 → 5cm wider at s=2, 2.5cm at s=1.5
-    rotFwd   : 0.60,   // forward tilt (rad) per (s-1)
-    rotLat   : -0.50,  // lateral tilt (rad) per (s-1)
-    rotY     : 0.50,   // left/right rotation (rad) per (s-1)
-    xSqueeze : 1.00,   // X scale multiplier (< 1 narrows each breast)
+    // Position — Local  (bone-relative, offset scaled by growth = halfH*(s-1))
+    loc_x      :  0.18,  // X spread per unit of growth
+    loc_y      :  0.30,  // Y spread per unit of growth
+    loc_z      :  0.65,  // Z forward push per unit of growth
+    loc_z_base :  0.00,  // Z constant base offset (independent of size)
+    // Position — Global  (world-space, same for both breasts in same direction)
+    glob_y     :  0.00,  // world-Y separation per (s-1)  — e.g. 0.05 → 5cm wider at s=2
+    glob_z     :  0.20,  // world-Z sag per unit of growth (downward)
+    // Rotation — Local  (bone-relative, angle in rad per (s-1))
+    rot_x      :  0.60,  // rotation around X (forward tilt)
+    rot_y      :  0.50,  // rotation around Y (left/right)
+    rot_z      : -0.50,  // rotation around Z (lateral tilt)
+    // Scale
+    scale_x    :  1.00,  // X scale multiplier (< 1 narrows each breast)
 };
 
 // COCO 18 limb connections — COCO standard (direct shoulder→elbow, hip→knee, etc.)
@@ -357,7 +359,7 @@ export class MannequinRenderer {
                 const growth = halfH * (s - 1);
 
                 obj.scale.set(
-                    bs.x * c.xSqueeze * Math.pow(s, 0.85),
+                    bs.x * c.scale_x * Math.pow(s, 0.85),
                     bs.y * Math.pow(s, 0.7),
                     bs.z * Math.pow(s, 1.0)
                 );
@@ -365,17 +367,17 @@ export class MannequinRenderer {
                 const fwdSign  = Math.abs(bp.z) > 0.001 ? Math.sign(bp.z) : -1;
                 const latSign  = Math.abs(bp.x) > 0.001 ? Math.sign(bp.x) : 1;
                 const latSignY = Math.abs(bp.y) > 0.001 ? Math.sign(bp.y) : 1;
-                // spread: direct world-unit offset per (s-1), independent of mesh size
+
                 obj.position.set(
-                    bp.x + latSign  * growth * c.latX,
-                    bp.y + latSignY * (growth * c.latY + (s - 1) * c.spread),
-                    bp.z + fwdSign  * (c.baseFwd + growth * c.fwdPush) - growth * c.droop
+                    bp.x + latSign  * growth * c.loc_x,
+                    bp.y + latSignY * (growth * c.loc_y + (s - 1) * c.glob_y),
+                    bp.z + fwdSign  * (c.loc_z_base + growth * c.loc_z) - growth * c.glob_z
                 );
 
                 obj.rotation.set(
-                    -fwdSign * c.rotFwd * (s - 1),
-                    latSign  * c.rotY   * (s - 1),
-                    latSign  * c.rotLat * (s - 1)
+                    -fwdSign * c.rot_x * (s - 1),
+                    latSign  * c.rot_y * (s - 1),
+                    latSign  * c.rot_z * (s - 1)
                 );
             } else {
                 // All other extra nodes (ears, eyes, nose): scale offset proportionally
