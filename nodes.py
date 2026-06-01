@@ -12,6 +12,12 @@ from PIL import Image
 
 from .image_processing import load_image, image_to_tensor
 
+try:
+    from .glb_renderer import render_glb_depth
+    _GLB_RENDERER_OK = True
+except Exception:
+    _GLB_RENDERER_OK = False
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -142,9 +148,22 @@ class AnimeMannequinNode:
             rendered = _render_from_scene(scene_str, width, height)
             if rendered:
                 pose     = image_to_tensor(_dataurl_to_array(rendered["pose"],     width, height))
-                depth    = image_to_tensor(_dataurl_to_array(rendered["depth"],    width, height))
-                canny    = image_to_tensor(_dataurl_to_array(rendered["canny"],    width, height))
                 openpose = image_to_tensor(_dataurl_to_array(rendered["openpose"], width, height))
+
+                # Use GLB mesh renderer for depth/canny if pyrender is available
+                if _GLB_RENDERER_OK:
+                    glb_result = render_glb_depth(scene_str, width, height)
+                    if glb_result is not None:
+                        depth_arr, canny_arr = glb_result
+                        depth = image_to_tensor(depth_arr)
+                        canny = image_to_tensor(canny_arr)
+                    else:
+                        depth = image_to_tensor(_dataurl_to_array(rendered["depth"], width, height))
+                        canny = image_to_tensor(_dataurl_to_array(rendered["canny"], width, height))
+                else:
+                    depth = image_to_tensor(_dataurl_to_array(rendered["depth"], width, height))
+                    canny = image_to_tensor(_dataurl_to_array(rendered["canny"], width, height))
+
                 return (pose, depth, canny, openpose)
             # Rendering failed — fall through to file-based path
 
