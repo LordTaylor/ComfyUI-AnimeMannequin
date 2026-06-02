@@ -465,7 +465,28 @@ export class MannequinRenderer {
         this._camera.lookAt(0, WORLD_HEIGHT * 0.5, 0);
     }
 
-    getSceneData(gender, cameraAzimuth = 0, cameraElevation = 5) {
+    /**
+     * Current orbit-camera angle as {azimuth, elevation, distance} — the exact inverse
+     * of _applyCameraFromScene (target = (0, WORLD_HEIGHT/2, 0)).  Azimuth is clamped to
+     * ±70° (and elevation/distance to sane ranges) so a saved view can drive the output
+     * render without reaching the back of the model, where the GLB mirror/flip handling
+     * would break.
+     */
+    getCameraState() {
+        const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+        const ty = WORLD_HEIGHT * 0.5;
+        const ox = this._camera.position.x;
+        const oy = this._camera.position.y - ty;
+        const oz = this._camera.position.z;
+        const r  = Math.hypot(ox, oy, oz) || 1e-6;
+        return {
+            azimuth:   clamp(THREE.MathUtils.radToDeg(Math.atan2(ox, oz)),          -70, 70),
+            elevation: clamp(THREE.MathUtils.radToDeg(Math.asin(clamp(oy / r, -1, 1))), -30, 60),
+            distance:  clamp(r / WORLD_HEIGHT,                                       1.2, 3.5),
+        };
+    }
+
+    getSceneData(gender) {
         const bones = {};
         for (const [name, obj] of this._bones) {
             const q = obj.quaternion;
@@ -475,7 +496,7 @@ export class MannequinRenderer {
             version: '1.0',
             gender: this._gender,
             bones,
-            camera: { azimuth: cameraAzimuth, elevation: cameraElevation, distance: 2.5 },
+            camera: this.getCameraState(),   // real orbit angle (clamped to safe range)
             proportions: { ...this._proportions },
         };
     }
