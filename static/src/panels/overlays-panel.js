@@ -129,6 +129,26 @@ export class OverlaysPanel {
             }
         );
 
+        // bg position X slider (percent of image size, -50…50)
+        this._inputs.bgOffsetX = this._mkSlider(panel, 'Pos X', -50, 50, 1,
+            () => this._store.getState().bgImage.offsetX ?? 0,
+            v  => this._store.setBgImage({ offsetX: v }),
+            v  => {
+                const prev = this._store.getState().bgImage;
+                this._history.execute(new SetBgImageCommand(prev, { ...prev, offsetX: v }), this._store);
+            }
+        );
+
+        // bg position Y slider
+        this._inputs.bgOffsetY = this._mkSlider(panel, 'Pos Y', -50, 50, 1,
+            () => this._store.getState().bgImage.offsetY ?? 0,
+            v  => this._store.setBgImage({ offsetY: v }),
+            v  => {
+                const prev = this._store.getState().bgImage;
+                this._history.execute(new SetBgImageCommand(prev, { ...prev, offsetY: v }), this._store);
+            }
+        );
+
         // ── Crop frame section ─────────────────────────────────────────────────
         mkSep('Crop frame');
 
@@ -230,6 +250,16 @@ export class OverlaysPanel {
         if (this._inputs.bgZoom) {
             this._inputs.bgZoom.slider.value = state.bgImage.zoom;
             this._inputs.bgZoom.num.textContent = state.bgImage.zoom.toFixed(2);
+        }
+        if (this._inputs.bgOffsetX) {
+            const v = state.bgImage.offsetX ?? 0;
+            this._inputs.bgOffsetX.slider.value = v;
+            this._inputs.bgOffsetX.num.textContent = v.toFixed(2);
+        }
+        if (this._inputs.bgOffsetY) {
+            const v = state.bgImage.offsetY ?? 0;
+            this._inputs.bgOffsetY.slider.value = v;
+            this._inputs.bgOffsetY.num.textContent = v.toFixed(2);
         }
         if (this._inputs.cropColor) {
             this._inputs.cropColor.value = state.cropFrame.color;

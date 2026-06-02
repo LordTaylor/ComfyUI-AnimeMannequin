@@ -25,7 +25,7 @@ export function defaultState(gender = 'F') {
         groundEnabled:  false,
         outputWidth:    768,
         outputHeight:   1024,
-        bgImage:   { dataUrl: null, opacity: 0.5, zoom: 1.0 },
+        bgImage:   { dataUrl: null, opacity: 0.5, zoom: 1.0, offsetX: 0, offsetY: 0 },
         cropFrame: { color: '#ffffff', opacity: 0.55 },
     };
 }

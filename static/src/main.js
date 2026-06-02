@@ -172,10 +172,32 @@ btnColors.addEventListener('click', () => {
     btnColors.classList.toggle('active', next === 'openpose');
 });
 
+// ── Mini overflow menu (⋯) ──────────────────────────────────────────────────────
+const btnMore  = document.getElementById('btn-more');
+const moreMenu = document.getElementById('more-menu');
+function closeMoreMenu() {
+    moreMenu.classList.remove('open');
+    btnMore.classList.remove('open');
+}
+btnMore.addEventListener('click', e => {
+    e.stopPropagation();
+    const open = moreMenu.classList.toggle('open');
+    btnMore.classList.toggle('open', open);
+});
+// Close after picking any tool inside the menu
+moreMenu.addEventListener('click', () => closeMoreMenu());
+// Close when clicking anywhere else
+document.addEventListener('click', e => {
+    if (moreMenu.classList.contains('open') &&
+        !moreMenu.contains(e.target) && e.target !== btnMore) {
+        closeMoreMenu();
+    }
+});
+
 // ── Reactive overlay updates ───────────────────────────────────────────────────
 store.subscribe(state => {
     const bgImg = document.getElementById('bg-image');
-    const { dataUrl, opacity, zoom } = state.bgImage;
+    const { dataUrl, opacity, zoom, offsetX = 0, offsetY = 0 } = state.bgImage;
     if (dataUrl) {
         if (bgImg.src !== dataUrl) bgImg.src = dataUrl;
         bgImg.style.display = 'block';
@@ -183,7 +205,7 @@ store.subscribe(state => {
         bgImg.style.display = 'none';
     }
     bgImg.style.opacity   = opacity;
-    bgImg.style.transform = `scale(${zoom})`;
+    bgImg.style.transform = `translate(${offsetX}%, ${offsetY}%) scale(${zoom})`;
 
     const frame = document.getElementById('crop-frame');
     const { color, opacity: cfOpacity } = state.cropFrame;
