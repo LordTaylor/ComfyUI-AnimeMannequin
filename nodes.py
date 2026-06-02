@@ -159,18 +159,20 @@ class AnimeMannequinNode:
                 def _flip_h(arr: np.ndarray) -> np.ndarray:
                     return np.ascontiguousarray(arr[:, ::-1, :])
 
-                # Single source of truth: the GLB renderer produces depth, canny AND
-                # openpose from the SAME posed joints + same camera.  pose := depth and
-                # openpose overlays the mesh exactly — no second (FK) generator, no drift.
+                # Single source of truth: the GLB renderer produces pose, depth, canny
+                # AND openpose from the SAME posed joints + same camera.
+                #   pose     = shaded clay render of the model (editor-style screenshot)
+                #   openpose = clean OpenPose skeleton (the ControlNet input)
+                # Both overlay depth exactly — no second (FK) generator, no drift.
                 pose = depth = canny = openpose = None
                 if _GLB_RENDERER_OK:
                     bone_transforms = rendered.get("bones")
                     glb_result = render_glb_depth(scene_str, width, height, bone_transforms)
                     if glb_result is not None:
-                        depth_arr, canny_arr, openpose_arr = glb_result
+                        pose_arr, depth_arr, canny_arr, openpose_arr = glb_result
+                        pose  = image_to_tensor(pose_arr)
                         depth = image_to_tensor(depth_arr)
                         canny = image_to_tensor(canny_arr)
-                        pose  = depth.clone()  # same content; independent tensor
                         if openpose_arr is not None:
                             openpose = image_to_tensor(openpose_arr)
 

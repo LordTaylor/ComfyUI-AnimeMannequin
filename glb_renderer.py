@@ -12,7 +12,7 @@ Without bone_transforms the mesh is rendered in rest T-pose (combined mesh).
 
 Exports:
     render_glb_depth(scene_json, width, height, bone_transforms=None)
-        -> (depth_arr, canny_arr) | None
+        -> (pose_arr, depth_arr, canny_arr, openpose_arr) | None
 """
 
 import os
@@ -423,6 +423,43 @@ def _load_combined_mesh(gender: str):
 
 # ── Canny (Sobel edge detection) ──────────────────────────────────────────────
 
+def _shade_from_depth(depth: np.ndarray, fg: np.ndarray, width: int, height: int) -> np.ndarray:
+    """Form-revealing clay shading derived from the depth buffer.
+
+    pyrender's directional lighting renders this mesh flat (normals don't reach the
+    shader), so instead we reconstruct surface normals from the depth gradient and
+    apply simple Lambert shading from an upper-left key light.  Deterministic, always
+    shows the 3-D form — this is the editor-style "pose" screenshot.
+    """
+    # Normalise foreground depth to [0,1]; flatten background to far plane so the
+    # silhouette edge doesn't create a huge gradient spike.
+    d = np.full((height, width), 1.0, dtype=np.float32)
+    mn, mx = depth[fg].min(), depth[fg].max()
+    d[fg] = (depth[fg] - mn) / (mx - mn + 1e-6)
+
+    # Surface normal from depth slope: n = normalize(-dz/dx, -dz/dy, 1/S).
+    gx = np.zeros_like(d)
+    gy = np.zeros_like(d)
+    gx[:, 1:-1] = d[:, 2:] - d[:, :-2]
+    gy[1:-1, :] = d[2:, :] - d[:-2, :]
+    slope = max(width, height) * 0.06          # amplify gentle curvature into shading
+    nx = -gx * slope
+    ny = -gy * slope
+    nz = np.ones_like(d)
+    inv = 1.0 / np.sqrt(nx * nx + ny * ny + nz * nz)
+    nx *= inv; ny *= inv; nz *= inv
+
+    # Key light from upper-left, tilted toward the viewer (image x→right, y→down).
+    L = np.array([-0.45, -0.55, 0.70], dtype=np.float32)
+    L /= np.linalg.norm(L)
+    ndl = np.clip(nx * L[0] + ny * L[1] + nz * L[2], 0.0, 1.0)
+
+    shade = 0.22 + 0.78 * ndl                  # ambient + diffuse
+    g = np.zeros((height, width), dtype=np.float32)
+    g[fg] = np.clip(shade[fg], 0.0, 1.0)
+    return np.stack([g, g, g], axis=-1)
+
+
 def _sobel_canny(depth_uint8: np.ndarray) -> np.ndarray:
     src = depth_uint8.astype(np.float32)
     gx = (-src[:-2, :-2] + src[:-2, 2:]
@@ -504,34 +541,41 @@ def _project_joints(joints, cam_pose, yfov, aspect, width, height):
 
 
 def _render_openpose_from_joints(joints2d, width, height):
-    """Draw the OpenPose-18 skeleton (grey bg, small colour dots + skeleton lines).
+    """Draw the clean OpenPose-18 skeleton on a black background.
 
-    Dot radius: ~4-6 px (ControlNet-style, not the big reference blobs from the
-    headless editor which used r = (W/14) * frac * 18 → 100-150 px at 1024 px).
+    Matches the editor's renderPose look (the one the user liked): solid black bg,
+    thick limb lines (W/90) drawn first, then per-joint colour dots (W/70) on top so
+    the joints read as rounded caps.  Built from the SAME posed GLB joints + camera
+    as depth/pose, so it overlays them exactly — this IS the OpenPose ControlNet input.
     """
     from PIL import Image, ImageDraw
 
-    img  = Image.new("RGB", (width, height), (74, 74, 74))
-    draw = ImageDraw.Draw(img, "RGBA")
+    img  = Image.new("RGB", (width, height), (0, 0, 0))
+    draw = ImageDraw.Draw(img)
 
-    # Small fixed dot radius — independent of joint type (standard ControlNet size)
-    r = max(3, round(width / 160))
+    line_w = max(3, round(width / 90))
+    dot_r  = max(5, round(width / 70))
 
-    # Joint dots
-    for name, (px, py, _vz) in joints2d.items():
-        col = _OPENPOSE_COLORS.get(name)
-        if col is None:
-            continue
-        draw.ellipse([px - r, py - r, px + r, py + r], fill=col)
-
-    # Skeleton lines (thin, alpha 0.7)
-    line_w = max(1, round(width / 256))
+    # Limb lines first
     for a, b, col in _SKELETON_LIMBS:
         pa = joints2d.get(a)
         pb = joints2d.get(b)
         if pa is None or pb is None:
             continue
-        draw.line([pa[0], pa[1], pb[0], pb[1]], fill=(col[0], col[1], col[2], 179), width=line_w)
+        draw.line([pa[0], pa[1], pb[0], pb[1]], fill=col, width=line_w)
+
+    # Joint dots on top (each in its own COCO-18 colour, drawn once)
+    drawn = set()
+    for a, b, _col in _SKELETON_LIMBS:
+        for k in (a, b):
+            if k in drawn:
+                continue
+            drawn.add(k)
+            p = joints2d.get(k)
+            if p is None:
+                continue
+            jc = _OPENPOSE_COLORS.get(k, (255, 255, 255))
+            draw.ellipse([p[0] - dot_r, p[1] - dot_r, p[0] + dot_r, p[1] + dot_r], fill=jc)
 
     arr = np.asarray(img).astype(np.float32) / 255.0
     return arr
@@ -555,10 +599,13 @@ def render_glb_depth(scene_json: str, width: int, height: int, bone_transforms=N
 
     Returns
     -------
-    (depth_arr, canny_arr, openpose_arr) : each H×W×3 float32 [0,1], or None.
-        openpose_arr is generated from the SAME posed GLB joints as the depth
-        mesh (projected with the same camera), so it overlays the mesh exactly.
-        openpose_arr is None for the T-pose fallback (no posed joints available).
+    (pose_arr, depth_arr, canny_arr, openpose_arr) : each H×W×3 float32 [0,1], or None.
+        pose_arr      — shaded clay render of the posed model (editor-style screenshot).
+        depth_arr     — normalised depth map.
+        canny_arr     — Sobel edges of the depth.
+        openpose_arr  — clean OpenPose-18 skeleton on black, from the SAME posed GLB
+                        joints + same camera as depth/pose (overlays them exactly).
+                        None for the T-pose fallback (no posed joints available).
     """
     if not _PYRENDER_OK:
         return None
@@ -576,7 +623,7 @@ def render_glb_depth(scene_json: str, width: int, height: int, bone_transforms=N
     el         = camera_cfg.get("elevation", 5)
     aspect     = width / height
 
-    pr_scene = pyrender.Scene(bg_color=[0, 0, 0, 0], ambient_light=[0.4, 0.4, 0.4])
+    pr_scene = pyrender.Scene(bg_color=[0, 0, 0, 0], ambient_light=[0.30, 0.30, 0.30])
 
     if bone_transforms:
         # ── Posed render ──────────────────────────────────────────────────────
@@ -621,6 +668,8 @@ def render_glb_depth(scene_json: str, width: int, height: int, bone_transforms=N
     cam_pose = _build_camera_pose(centroid, size, az, el)
     camera   = pyrender.PerspectiveCamera(yfov=yfov, aspectRatio=aspect)
     pr_scene.add(camera, pose=cam_pose)
+    # Only the depth buffer is used downstream (the pose render is shaded from depth,
+    # not from this light), so a single light is enough to satisfy the renderer.
     pr_scene.add(pyrender.DirectionalLight(color=[1, 1, 1], intensity=3.0), pose=cam_pose)
 
     # ── Render ────────────────────────────────────────────────────────────────
@@ -634,11 +683,14 @@ def render_glb_depth(scene_json: str, width: int, height: int, bone_transforms=N
     finally:
         renderer.delete()
 
-    # ── Normalise depth → uint8, near=255, far=DEPTH_MIN ─────────────────────
+    # ── Foreground mask ───────────────────────────────────────────────────────
     DEPTH_MIN = 30
     fg = depth > 0
     if not fg.any():
         return None
+
+    # ── Shaded clay render (the "pose" = editor-style screenshot of the model) ─
+    pose_arr = _shade_from_depth(depth, fg, width, height)
 
     mn, mx   = depth[fg].min(), depth[fg].max()
     depth_u8 = np.zeros((height, width), dtype=np.uint8)
@@ -658,4 +710,4 @@ def render_glb_depth(scene_json: str, width: int, height: int, bone_transforms=N
         if joints2d:
             openpose_arr = _render_openpose_from_joints(joints2d, width, height)
 
-    return to_rgb(depth_u8), to_rgb(canny_u8), openpose_arr
+    return pose_arr, to_rgb(depth_u8), to_rgb(canny_u8), openpose_arr
