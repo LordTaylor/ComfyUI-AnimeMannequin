@@ -42,7 +42,9 @@ export class AppStore {
     // żeby zewnętrzna mutacja getState().pose.head nie wpłynęła na store.
     getState() {
         const pose = {};
-        for (const [k, v] of Object.entries(this._state.pose)) pose[k] = { ...v };
+        // `?? {}` guards against a state restored without a `pose` key (legacy/partial
+        // schema via replaceState) — Object.entries(null/undefined) would otherwise throw.
+        for (const [k, v] of Object.entries(this._state.pose ?? {})) pose[k] = { ...v };
         return {
             ...this._state,
             pose,
@@ -61,8 +63,11 @@ export class AppStore {
     }
 
     // Pełne zastąpienie stanu (np. wczytanie zapisanej sceny).
+    // Normalizujemy względem defaultState, żeby częściowy/legacy obiekt nie zostawił
+    // brakujących pól (np. pose) które wywróciłyby getState().
     replaceState(full) {
-        this._state = { ...full };
+        const base = defaultState(full?.gender ?? this._state.gender);
+        this._state = { ...base, ...full };
         this._notify();
     }
 

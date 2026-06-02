@@ -20,6 +20,7 @@ const store   = new AppStore(defaultState(gender));
 const history = new CommandHistory(20);
 
 const canvas   = document.getElementById('c');
+if (!canvas) throw new Error('[Mannequin] canvas #c not found — index.html may be stale; hard-refresh (Cmd+Shift+R).');
 const renderer = new MannequinRenderer(canvas, store);
 const editor   = new MannequinEditor(renderer, canvas, store);
 const poseLib  = new PoseLibrary(editor, renderer);
@@ -92,10 +93,15 @@ function resetCustomModel() {
 }
 
 // ── Loading overlay ────────────────────────────────────────────────────────────
+// Null-safe: these run during init (before the ComfyUI bridge is created), so a
+// missing overlay element must never throw and block bridge setup.
 const loadingOverlay = document.getElementById('loading-overlay');
 const loadingMsg     = document.getElementById('loading-msg');
-function showLoading(msg = 'Loading model…') { loadingMsg.textContent = msg; loadingOverlay.classList.remove('hidden'); }
-function hideLoading() { loadingOverlay.classList.add('hidden'); }
+function showLoading(msg = 'Loading model…') {
+    if (loadingMsg) loadingMsg.textContent = msg;
+    loadingOverlay?.classList.remove('hidden');
+}
+function hideLoading() { loadingOverlay?.classList.add('hidden'); }
 
 // ── Initial model load ─────────────────────────────────────────────────────────
 let initScene = null;
@@ -110,9 +116,12 @@ try {
     await editor.buildMannequin(gender, initScene ?? defaultScene(gender));
     hideLoading();
 } catch (err) {
-    loadingMsg.textContent = `Failed to load model — ${err.message}`;
-    loadingMsg.style.color = '#f44';
-    document.querySelector('.spinner').style.display = 'none';
+    if (loadingMsg) {
+        loadingMsg.textContent = `Failed to load model — ${err.message}`;
+        loadingMsg.style.color = '#f44';
+    }
+    const spinner = document.querySelector('.spinner');
+    if (spinner) spinner.style.display = 'none';
 }
 
 // ── Toolbar ────────────────────────────────────────────────────────────────────
@@ -269,7 +278,7 @@ if (mode === 'comfyui') {
 // ── Standalone mode ────────────────────────────────────────────────────────────
 if (mode === 'standalone') {
     const exportBar = document.getElementById('export-bar');
-    exportBar.style.display = 'flex';
+    if (exportBar) exportBar.style.display = 'flex';
 
     // Show GitHub link (hidden in ComfyUI embedded mode)
     const btnGithub = document.getElementById('btn-github');
@@ -280,6 +289,7 @@ if (mode === 'standalone') {
         a.href = dataUrl; a.download = name; a.click();
     }
     function withFeedback(btn, fn) {
+        if (!btn) return;
         btn.addEventListener('click', async () => {
             if (btn.disabled) return;
             btn.disabled = true;
@@ -301,10 +311,11 @@ const CROP_PAD_TOP    = 0.04;
 const CROP_PAD_BOTTOM = 0.09;
 const CROP_PAD_SIDE   = 0.04;
 
-const cropFrame = document.getElementById('crop-frame');
+const cropFrame  = document.getElementById('crop-frame');
+const canvasWrap = document.getElementById('canvas-wrap');   // cached once, guarded below
 function updateCropFrame() {
-    const wrap = document.getElementById('canvas-wrap');
-    const cW = wrap.clientWidth, cH = wrap.clientHeight;
+    if (!cropFrame || !canvasWrap) return;
+    const cW = canvasWrap.clientWidth, cH = canvasWrap.clientHeight;
     const oW = renderer.outputWidth, oH = renderer.outputHeight;
     if (!cW || !cH || !oW || !oH) { cropFrame.style.display = 'none'; return; }
 
@@ -332,15 +343,14 @@ function updateCropFrame() {
     cropFrame.style.height = Math.round(fH) + 'px';
 }
 
-new ResizeObserver(updateCropFrame).observe(document.getElementById('canvas-wrap'));
+if (canvasWrap) new ResizeObserver(updateCropFrame).observe(canvasWrap);
 
 // ── Render loop ────────────────────────────────────────────────────────────────
 function loop() {
     requestAnimationFrame(loop);
     editor.update();
-    if (renderer._dirty) {
-        const wrap = document.getElementById('canvas-wrap');
-        renderer.render(wrap.clientWidth, wrap.clientHeight);
+    if (renderer._dirty && canvasWrap) {
+        renderer.render(canvasWrap.clientWidth, canvasWrap.clientHeight);
         updateCropFrame();
     }
 }

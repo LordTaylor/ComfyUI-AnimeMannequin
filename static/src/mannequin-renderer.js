@@ -430,10 +430,16 @@ export class MannequinRenderer {
     _boneNames() { return BONE_NAMES; }
 
     applyScene(sceneData) {
+        if (!sceneData) return;
         for (const [name, bone] of this._bones) {
             const data = sceneData.bones?.[name];
-            if (!data?.rotation) continue;
-            const [x, y, z, w] = data.rotation;
+            const rot  = data?.rotation;
+            // Only apply a well-formed quaternion. A non-array truthy value (e.g. a
+            // number from a hand-edited / partial imported pose) would otherwise throw
+            // "not iterable"; a wrong-length array would silently NaN the character.
+            if (!Array.isArray(rot) || rot.length < 4) continue;
+            const [x, y, z, w] = rot;
+            if ([x, y, z, w].some(n => typeof n !== 'number' || Number.isNaN(n))) continue;
             bone.quaternion.set(x, y, z, w);
         }
         if (sceneData.camera) {
@@ -446,9 +452,11 @@ export class MannequinRenderer {
     }
 
     _applyCameraFromScene(cam) {
-        const r = cam.distance * WORLD_HEIGHT;
-        const azRad = THREE.MathUtils.degToRad(cam.azimuth);
-        const elRad = THREE.MathUtils.degToRad(cam.elevation);
+        // Defaults so a present-but-partial camera object can't produce a NaN position.
+        const { azimuth = 0, elevation = 5, distance = 2.5 } = cam ?? {};
+        const r = distance * WORLD_HEIGHT;
+        const azRad = THREE.MathUtils.degToRad(azimuth);
+        const elRad = THREE.MathUtils.degToRad(elevation);
         this._camera.position.set(
             r * Math.sin(azRad) * Math.cos(elRad),
             r * Math.sin(elRad) + WORLD_HEIGHT * 0.5,

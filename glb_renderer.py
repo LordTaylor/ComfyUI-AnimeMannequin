@@ -223,6 +223,20 @@ def _quat_to_matrix(q) -> np.ndarray:
     ], dtype=np.float64)
 
 
+def _bone_quat(bt):
+    """Extract a valid [x,y,z,w] quaternion from a headless bone-transform entry.
+
+    The bone dict comes from the external headless_render.js subprocess; a missing or
+    truncated `quat` must be treated as "unposed" (identity) rather than raising.
+    """
+    if not isinstance(bt, dict):
+        return None
+    q = bt.get("quat")
+    if isinstance(q, (list, tuple)) and len(q) >= 4:
+        return q
+    return None
+
+
 def _fk_quat_to_glb_R(quat) -> np.ndarray:
     """
     Convert a FK-space world quaternion to a GLB-space rotation matrix.
@@ -299,13 +313,14 @@ def _build_posed_segments(scene, gender: str, bone_transforms: dict):
     new_pos: dict[str, np.ndarray] = {}
 
     def _traverse(bone_name: str, parent_new_pos: np.ndarray, parent_R_glb: np.ndarray):
-        bt = bone_transforms.get(bone_name)
-        if bt is None:
+        bt   = bone_transforms.get(bone_name)
+        quat = _bone_quat(bt)
+        if quat is None:
             bone_R_glb = np.eye(3)
             bn_new_pos = rest_pos.get(bone_name, parent_new_pos)
         else:
             # FK world rotation → GLB-space rotation matrix
-            bone_R_glb = _fk_quat_to_glb_R(bt["quat"])
+            bone_R_glb = _fk_quat_to_glb_R(quat)
 
             if bone_name == "torso":
                 # Root stays at rest position
@@ -337,15 +352,16 @@ def _build_posed_segments(scene, gender: str, bone_transforms: dict):
     for bone_name, node_name in mesh_map.items():
         if node_name is None:
             continue
-        bt = bone_transforms.get(bone_name)
-        if bt is None:
+        bt   = bone_transforms.get(bone_name)
+        quat = _bone_quat(bt)
+        if quat is None:
             continue
         result = _get_geom(scene, node_name)
         if result is None:
             continue
         T_glb, geom = result
 
-        bone_R_glb = _fk_quat_to_glb_R(bt["quat"])
+        bone_R_glb = _fk_quat_to_glb_R(quat)
         R_rest = rest_R.get(bone_name, np.eye(3))
         S_rest = rest_S.get(bone_name, np.ones(3))
 

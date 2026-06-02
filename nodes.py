@@ -166,8 +166,15 @@ class AnimeMannequinNode:
                 # Both overlay depth exactly — no second (FK) generator, no drift.
                 pose = depth = canny = openpose = None
                 if _GLB_RENDERER_OK:
-                    bone_transforms = rendered.get("bones")
-                    glb_result = render_glb_depth(scene_str, width, height, bone_transforms)
+                    # Wrap the whole GLB path: any failure inside (malformed bone data,
+                    # trimesh/pyrender errors, degenerate mesh) must degrade to the
+                    # headless fallback below — never crash the node.
+                    try:
+                        bone_transforms = rendered.get("bones")
+                        glb_result = render_glb_depth(scene_str, width, height, bone_transforms)
+                    except Exception as e:
+                        print(f"[AnimeMannequin] GLB render failed, falling back: {e}")
+                        glb_result = None
                     if glb_result is not None:
                         pose_arr, depth_arr, canny_arr, openpose_arr = glb_result
                         pose  = image_to_tensor(pose_arr)
@@ -176,15 +183,26 @@ class AnimeMannequinNode:
                         if openpose_arr is not None:
                             openpose = image_to_tensor(openpose_arr)
 
-                # Fallbacks (GLB unavailable / failed) — use flipped headless outputs.
+                # Fallbacks (GLB unavailable / failed) — flipped headless outputs.
+                # The subprocess JSON is external: a missing/garbled key must yield a
+                # black frame, not a KeyError/ValueError that crashes this fallback path.
+                def _safe_headless(key: str) -> np.ndarray:
+                    url = rendered.get(key)
+                    if not isinstance(url, str) or "," not in url:
+                        return np.zeros((height, width, 3), dtype=np.float32)
+                    try:
+                        return _flip_h(_dataurl_to_array(url, width, height))
+                    except Exception:
+                        return np.zeros((height, width, 3), dtype=np.float32)
+
                 if depth is None:
-                    depth = image_to_tensor(_flip_h(_dataurl_to_array(rendered["depth"], width, height)))
+                    depth = image_to_tensor(_safe_headless("depth"))
                 if canny is None:
-                    canny = image_to_tensor(_flip_h(_dataurl_to_array(rendered["canny"], width, height)))
+                    canny = image_to_tensor(_safe_headless("canny"))
                 if pose is None:
-                    pose = image_to_tensor(_flip_h(_dataurl_to_array(rendered["pose"], width, height)))
+                    pose = image_to_tensor(_safe_headless("pose"))
                 if openpose is None:
-                    openpose = image_to_tensor(_flip_h(_dataurl_to_array(rendered["openpose"], width, height)))
+                    openpose = image_to_tensor(_safe_headless("openpose"))
 
                 return (pose, depth, canny, openpose)
             # Rendering failed — fall through to file-based path
