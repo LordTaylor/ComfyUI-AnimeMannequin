@@ -37,7 +37,7 @@ export class BustDebugPanel {
             'padding:8px 10px', 'border-radius:6px',
             'z-index:9999', 'min-width:220px',
             'box-shadow:0 4px 16px rgba(0,0,0,0.5)',
-            'user-select:none',
+            'user-select:none', 'display:none',   // closed by default
         ].join(';');
 
         // ── Header + drag ──────────────────────────────────────────────────────

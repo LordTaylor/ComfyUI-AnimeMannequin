@@ -39,6 +39,52 @@ export class PoseLibrary {
         this._editor.applySceneWithUndo(pose.scene);
     }
 
+    // ── Import / Export ──────────────────────────────────────────────────────────
+
+    _download(filename, obj) {
+        const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href = url; a.download = filename; a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    exportAll() {
+        const poses = this._load();
+        if (!poses.length) { alert('No saved poses to export.'); return; }
+        this._download('mannequin-poses.json',
+            { type: 'mannequin-pose-collection', version: 1, poses });
+    }
+
+    exportOne(id) {
+        const pose = this._load().find(p => p.id === id);
+        if (!pose) return;
+        const safe = (pose.name || 'pose').replace(/[^a-z0-9_-]+/gi, '_').slice(0, 40);
+        this._download(`pose-${safe}.json`, { type: 'mannequin-pose', version: 1, pose });
+    }
+
+    /** Accepts a collection {poses:[…]}, a single {pose:{…}}, a raw array, or a raw pose. */
+    importData(data) {
+        let incoming = [];
+        if (Array.isArray(data))            incoming = data;
+        else if (Array.isArray(data?.poses)) incoming = data.poses;
+        else if (data?.pose)                 incoming = [data.pose];
+        else if (data?.scene)                incoming = [data];
+        incoming = incoming.filter(p => p && p.scene);
+        if (!incoming.length) { alert('No valid poses found in this file.'); return; }
+
+        let n = 0;
+        const base = Date.now();
+        const stamped = incoming.map(p => ({
+            id:        `${base}_${n++}`,            // fresh ids — never collide with existing
+            name:      (p.name || 'Imported').toString().slice(0, 60),
+            thumbnail: p.thumbnail || '',
+            scene:     p.scene,
+        }));
+        this._save([...stamped, ...this._load()].slice(0, 50));
+        this._renderList();
+    }
+
     toggle() {
         this._visible = !this._visible;
         if (this._panel) this._panel.style.display = this._visible ? 'flex' : 'none';
@@ -79,6 +125,40 @@ export class PoseLibrary {
         };
         header.appendChild(saveBtn);
 
+        // ── Import / Export row ────────────────────────────────────────────────
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'application/json,.json';
+        fileInput.style.display = 'none';
+        fileInput.addEventListener('change', e => {
+            const file = e.target.files[0];
+            e.target.value = '';
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                try { this.importData(JSON.parse(reader.result)); }
+                catch { alert('Invalid JSON file.'); }
+            };
+            reader.readAsText(file);
+        });
+
+        const ioRow = document.createElement('div');
+        ioRow.style.cssText = 'display:flex;gap:4px;margin-top:6px;';
+        const importBtn = document.createElement('button');
+        importBtn.textContent = '⬆ Import';
+        importBtn.title = 'Import poses from a .json file';
+        importBtn.style.cssText = 'flex:1;padding:5px;background:#333;color:#cce;border:none;border-radius:4px;cursor:pointer;font-size:11px;';
+        importBtn.onclick = () => fileInput.click();
+        const exportBtn = document.createElement('button');
+        exportBtn.textContent = '⬇ Export all';
+        exportBtn.title = 'Export the whole library to a .json file';
+        exportBtn.style.cssText = 'flex:1;padding:5px;background:#333;color:#cce;border:none;border-radius:4px;cursor:pointer;font-size:11px;';
+        exportBtn.onclick = () => this.exportAll();
+        ioRow.appendChild(importBtn);
+        ioRow.appendChild(exportBtn);
+        header.appendChild(ioRow);
+        header.appendChild(fileInput);
+
         this._listEl = document.createElement('div');
         this._listEl.style.cssText = 'flex:1;overflow-y:auto;padding:4px;';
 
@@ -104,8 +184,10 @@ export class PoseLibrary {
             item.onclick = () => this.loadPose(pose.id);
 
             const thumb = document.createElement('img');
-            thumb.src = pose.thumbnail;
-            thumb.style.cssText = 'width:48px;height:64px;object-fit:cover;border-radius:3px;flex-shrink:0;';
+            thumb.style.cssText = 'width:48px;height:64px;object-fit:cover;border-radius:3px;flex-shrink:0;background:#444;';
+            if (pose.thumbnail) thumb.src = pose.thumbnail;
+            else thumb.alt = '';            // imported pose without a thumbnail → grey box
+            thumb.onerror = () => { thumb.removeAttribute('src'); };
 
             const info = document.createElement('div');
             info.style.cssText = 'flex:1;min-width:0;';
@@ -114,13 +196,21 @@ export class PoseLibrary {
             nameEl.style.cssText = 'color:#eee;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
             info.appendChild(nameEl);
 
+            const exp = document.createElement('button');
+            exp.textContent = '⬇';
+            exp.title = 'Export this pose';
+            exp.style.cssText = 'background:none;border:none;color:#888;cursor:pointer;font-size:12px;padding:0 4px;flex-shrink:0;';
+            exp.onclick = e => { e.stopPropagation(); this.exportOne(pose.id); };
+
             const del = document.createElement('button');
             del.textContent = '×';
+            del.title = 'Delete this pose';
             del.style.cssText = 'background:none;border:none;color:#888;cursor:pointer;font-size:16px;padding:0 4px;flex-shrink:0;';
             del.onclick = e => { e.stopPropagation(); this.deletePose(pose.id); };
 
             item.appendChild(thumb);
             item.appendChild(info);
+            item.appendChild(exp);
             item.appendChild(del);
             this._listEl.appendChild(item);
         }

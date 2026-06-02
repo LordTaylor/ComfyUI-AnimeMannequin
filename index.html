@@ -31,6 +31,21 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 #btn-github { background: #333; color: #aaa; text-decoration: none; display: none; padding: 5px 12px; border-radius: 4px; font-size: 12px; font-weight: bold; }
 #btn-github:hover { background: #444; color: #fff; }
 
+/* Mini overflow menu (⋯) */
+#more-wrap { position: relative; }
+#btn-more { background: #333; color: #aaa; font-size: 16px; line-height: 1; padding: 4px 10px; }
+#btn-more.open { background: #555; color: #fff; }
+#more-menu {
+    display: none; position: absolute; top: 100%; left: 0; margin-top: 4px;
+    background: #2a2a2a; border: 1px solid #555; border-radius: 6px;
+    padding: 4px; z-index: 200; min-width: 150px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+#more-menu.open { display: flex; flex-direction: column; gap: 4px; }
+#more-menu button { width: 100%; text-align: left; background: #383838; color: #ccc; }
+#more-menu button:hover { background: #4a4a4a; color: #fff; }
+#more-menu button.active { background: #5a3a1a; color: #fdc; }
+
 #canvas-wrap { flex: 1; position: relative; overflow: hidden; }
 canvas { display: block; width: 100%; height: 100%; }
 
@@ -96,23 +111,28 @@ canvas { display: block; width: 100%; height: 100%; }
   <h1>Mannequin</h1>
   <div class="toolbar-sep"></div>
   <button id="btn-gender" title="Toggle gender (F / M)">F</button>
+  <button id="btn-random"      title="Generate random pose">Random</button>
+  <button id="btn-random-mode" title="Safe: anatomical limits  |  click for Wild">🔒</button>
   <div class="toolbar-sep"></div>
   <button id="btn-undo"      title="Undo last rotation (Ctrl+Z)">Undo</button>
   <button id="btn-redo"      title="Redo (Ctrl+Shift+Z)">Redo</button>
   <button id="btn-reset"     title="Reset all bones to default pose">Reset</button>
-  <button id="btn-mirror-lr" title="Copy left side → right side">L→R</button>
-  <button id="btn-mirror-rl" title="Copy right side → left side">R→L</button>
   <div class="toolbar-sep"></div>
   <button id="btn-poses"       title="Open saved pose library">Poses</button>
-  <button id="btn-random"      title="Generate random pose">Random</button>
-  <button id="btn-random-mode" title="Safe: anatomical limits  |  click for Wild">🔒</button>
   <div class="toolbar-sep"></div>
   <button id="btn-props"   title="Model Control: proportions, ground plane">Model</button>
   <button id="btn-colors" class="active" title="Toggle joint colors: OpenPose rainbow / flat grey">OpenPose</button>
-  <button id="btn-bust-dbg" title="Bust debug panel">Bust⚙</button>
   <button id="btn-overlays" title="Overlays — reference image &amp; crop frame">Overlays</button>
   <div class="toolbar-sep"></div>
-  <button id="btn-custom-model" title="Load custom GLB humanoid model">Model ⬆</button>
+  <div id="more-wrap">
+    <button id="btn-more" title="More tools">⋯</button>
+    <div id="more-menu">
+      <button id="btn-mirror-lr" title="Copy left side → right side">Mirror L→R</button>
+      <button id="btn-mirror-rl" title="Copy right side → left side">Mirror R→L</button>
+      <button id="btn-bust-dbg" title="Bust debug panel">Bust ⚙</button>
+      <button id="btn-custom-model" title="Load custom GLB humanoid model">Load Model ⬆</button>
+    </div>
+  </div>
   <input type="file" id="custom-model-input" accept=".glb" style="display:none" />
   <button id="btn-save" title="Capture images and save to ComfyUI node">Close &amp; Save</button>
   <a id="btn-github" href="https://github.com/LordTaylor/ComfyUI-AnimeMannequin" target="_blank" title="GitHub — ComfyUI-AnimeMannequin">GitHub ↗</a>
