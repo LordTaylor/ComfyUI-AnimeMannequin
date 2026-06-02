@@ -237,6 +237,7 @@ export class BustDebugPanel {
         }
     }
 
+    isVisible() { return this._el ? this._el.style.display !== 'none' : false; }
     show()   { if (this._el) this._el.style.display = 'block'; }
     hide()   { if (this._el) this._el.style.display = 'none'; }
     toggle() {

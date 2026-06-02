@@ -30,15 +30,11 @@ propsPanel.mount(document.body);
 
 const bustDbg = new BustDebugPanel(store, history);
 bustDbg.mount(document.body);
-document.getElementById('btn-bust-dbg').addEventListener('click', () => bustDbg.toggle());
 
 const overlaysPanel = new OverlaysPanel(store, history);
 overlaysPanel.mount(document.body);
 const btnOverlays = document.getElementById('btn-overlays');
-btnOverlays.addEventListener('click', () => {
-    overlaysPanel.toggle();
-    btnOverlays.classList.toggle('active', overlaysPanel.isVisible());
-});
+// (panel toggles wired together below via the side-panel coordinator)
 
 // ── Background image picker ────────────────────────────────────────────────────
 document.getElementById('bg-file-input').addEventListener('change', e => {
@@ -143,8 +139,6 @@ document.getElementById('btn-redo').addEventListener('click', () => editor.redo(
 document.getElementById('btn-reset').addEventListener('click', () => editor.resetPose());
 document.getElementById('btn-mirror-lr').addEventListener('click', () => editor.mirrorPose('L_to_R'));
 document.getElementById('btn-mirror-rl').addEventListener('click', () => editor.mirrorPose('R_to_L'));
-document.getElementById('btn-poses').addEventListener('click', () => poseLib.toggle());
-
 let randomMode = 'safe';
 const btnRandomMode = document.getElementById('btn-random-mode');
 btnRandomMode.addEventListener('click', () => {
@@ -158,9 +152,30 @@ btnRandomMode.addEventListener('click', () => {
 document.getElementById('btn-random').addEventListener('click', () => editor.generateRandomPose(randomMode));
 
 const btnProps = document.getElementById('btn-props');
-btnProps.addEventListener('click', () => {
-    propsPanel.toggle();
-    btnProps.classList.toggle('active', propsPanel.isVisible());
+
+// ── Docked side panels — only one open at a time (Poses ⟷ Model) ─────────────────
+// Floating panels (Overlays, Bust) stay independent and are wired separately below.
+const SIDE_PANELS = [
+    { panel: poseLib,    btn: document.getElementById('btn-poses') },
+    { panel: propsPanel, btn: btnProps },
+];
+function toggleSidePanel(target) {
+    const willOpen = !target.panel.isVisible();
+    for (const e of SIDE_PANELS) {
+        const open = (e === target) && willOpen;
+        open ? e.panel.show() : e.panel.hide();
+        if (e.btn) e.btn.classList.toggle('active', open);
+    }
+}
+for (const e of SIDE_PANELS) {
+    if (e.btn) e.btn.addEventListener('click', () => toggleSidePanel(e));
+}
+
+// ── Floating panels — independent toggles ───────────────────────────────────────
+document.getElementById('btn-bust-dbg').addEventListener('click', () => bustDbg.toggle());
+btnOverlays.addEventListener('click', () => {
+    overlaysPanel.toggle();
+    btnOverlays.classList.toggle('active', overlaysPanel.isVisible());
 });
 
 const btnColors = document.getElementById('btn-colors');
