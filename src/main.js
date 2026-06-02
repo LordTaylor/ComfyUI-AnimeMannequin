@@ -37,7 +37,7 @@ const btnOverlays = document.getElementById('btn-overlays');
 // (panel toggles wired together below via the side-panel coordinator)
 
 // ── Background image picker ────────────────────────────────────────────────────
-document.getElementById('bg-file-input').addEventListener('change', e => {
+document.getElementById('bg-file-input')?.addEventListener('change', e => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
@@ -57,9 +57,9 @@ const btnCustomModel   = document.getElementById('btn-custom-model');
 const customModelInput = document.getElementById('custom-model-input');
 let _customModelName   = null;
 
-btnCustomModel.addEventListener('click', () => customModelInput.click());
+btnCustomModel?.addEventListener('click', () => customModelInput?.click());
 
-customModelInput.addEventListener('change', async e => {
+customModelInput?.addEventListener('change', async e => {
     const file = e.target.files[0];
     if (!file) return;
     customModelInput.value = '';
@@ -117,8 +117,8 @@ try {
 
 // ── Toolbar ────────────────────────────────────────────────────────────────────
 const btnGender = document.getElementById('btn-gender');
-btnGender.textContent = gender;
-btnGender.addEventListener('click', async () => {
+if (btnGender) btnGender.textContent = gender;
+btnGender?.addEventListener('click', async () => {
     if (btnGender.disabled) return;
     btnGender.disabled = true;
     resetCustomModel();
@@ -134,14 +134,14 @@ btnGender.addEventListener('click', async () => {
     }
 });
 
-document.getElementById('btn-undo').addEventListener('click', () => editor.undo());
-document.getElementById('btn-redo').addEventListener('click', () => editor.redo());
-document.getElementById('btn-reset').addEventListener('click', () => editor.resetPose());
-document.getElementById('btn-mirror-lr').addEventListener('click', () => editor.mirrorPose('L_to_R'));
-document.getElementById('btn-mirror-rl').addEventListener('click', () => editor.mirrorPose('R_to_L'));
+document.getElementById('btn-undo')?.addEventListener('click', () => editor.undo());
+document.getElementById('btn-redo')?.addEventListener('click', () => editor.redo());
+document.getElementById('btn-reset')?.addEventListener('click', () => editor.resetPose());
+document.getElementById('btn-mirror-lr')?.addEventListener('click', () => editor.mirrorPose('L_to_R'));
+document.getElementById('btn-mirror-rl')?.addEventListener('click', () => editor.mirrorPose('R_to_L'));
 let randomMode = 'safe';
 const btnRandomMode = document.getElementById('btn-random-mode');
-btnRandomMode.addEventListener('click', () => {
+btnRandomMode?.addEventListener('click', () => {
     randomMode = randomMode === 'safe' ? 'wild' : 'safe';
     btnRandomMode.textContent = randomMode === 'safe' ? '🔒' : '🔓';
     btnRandomMode.classList.toggle('wild', randomMode === 'wild');
@@ -149,7 +149,7 @@ btnRandomMode.addEventListener('click', () => {
         ? 'Safe: anatomical limits  |  click for Wild'
         : 'Wild: anything goes  |  click for Safe';
 });
-document.getElementById('btn-random').addEventListener('click', () => editor.generateRandomPose(randomMode));
+document.getElementById('btn-random')?.addEventListener('click', () => editor.generateRandomPose(randomMode));
 
 const btnProps = document.getElementById('btn-props');
 
@@ -172,14 +172,17 @@ for (const e of SIDE_PANELS) {
 }
 
 // ── Floating panels — independent toggles ───────────────────────────────────────
-document.getElementById('btn-bust-dbg').addEventListener('click', () => bustDbg.toggle());
-btnOverlays.addEventListener('click', () => {
+// All wiring below is null-safe: a missing toolbar button (e.g. an embedded host
+// serving a cached older index.html) must NEVER crash init — the 3-D editor and the
+// ComfyUI bridge are created further down and have to run regardless.
+document.getElementById('btn-bust-dbg')?.addEventListener('click', () => bustDbg.toggle());
+btnOverlays?.addEventListener('click', () => {
     overlaysPanel.toggle();
     btnOverlays.classList.toggle('active', overlaysPanel.isVisible());
 });
 
 const btnColors = document.getElementById('btn-colors');
-btnColors.addEventListener('click', () => {
+btnColors?.addEventListener('click', () => {
     const current = store.getState().jointColorMode;
     const next    = current === 'openpose' ? 'flat' : 'openpose';
     store.setState({ jointColorMode: next });
@@ -190,28 +193,28 @@ btnColors.addEventListener('click', () => {
 // ── Mini overflow menu (⋯) ──────────────────────────────────────────────────────
 const btnMore  = document.getElementById('btn-more');
 const moreMenu = document.getElementById('more-menu');
-function closeMoreMenu() {
-    moreMenu.classList.remove('open');
-    btnMore.classList.remove('open');
+if (btnMore && moreMenu) {
+    const closeMoreMenu = () => { moreMenu.classList.remove('open'); btnMore.classList.remove('open'); };
+    btnMore.addEventListener('click', e => {
+        e.stopPropagation();
+        const open = moreMenu.classList.toggle('open');
+        btnMore.classList.toggle('open', open);
+    });
+    // Close after picking any tool inside the menu
+    moreMenu.addEventListener('click', () => closeMoreMenu());
+    // Close when clicking anywhere else
+    document.addEventListener('click', e => {
+        if (moreMenu.classList.contains('open') &&
+            !moreMenu.contains(e.target) && e.target !== btnMore) {
+            closeMoreMenu();
+        }
+    });
 }
-btnMore.addEventListener('click', e => {
-    e.stopPropagation();
-    const open = moreMenu.classList.toggle('open');
-    btnMore.classList.toggle('open', open);
-});
-// Close after picking any tool inside the menu
-moreMenu.addEventListener('click', () => closeMoreMenu());
-// Close when clicking anywhere else
-document.addEventListener('click', e => {
-    if (moreMenu.classList.contains('open') &&
-        !moreMenu.contains(e.target) && e.target !== btnMore) {
-        closeMoreMenu();
-    }
-});
 
 // ── Reactive overlay updates ───────────────────────────────────────────────────
 store.subscribe(state => {
     const bgImg = document.getElementById('bg-image');
+    if (!bgImg) return;
     const { dataUrl, opacity, zoom, offsetX = 0, offsetY = 0 } = state.bgImage;
     if (dataUrl) {
         if (bgImg.src !== dataUrl) bgImg.src = dataUrl;
@@ -223,6 +226,7 @@ store.subscribe(state => {
     bgImg.style.transform = `translate(${offsetX}%, ${offsetY}%) scale(${zoom})`;
 
     const frame = document.getElementById('crop-frame');
+    if (!frame) return;
     const { color, opacity: cfOpacity } = state.cropFrame;
     const r = parseInt(color.slice(1, 3), 16);
     const g = parseInt(color.slice(3, 5), 16);
@@ -233,30 +237,33 @@ store.subscribe(state => {
 
 // ── ComfyUI mode ───────────────────────────────────────────────────────────────
 if (mode === 'comfyui') {
+    // Bridge first — the node depends on it; nothing below may block its creation.
     new ComfyuiBridge(editor, renderer);
     const statusBar = document.getElementById('status-bar');
     const statusEl  = document.getElementById('status');
-    statusBar.style.display = 'block';
+    if (statusBar) statusBar.style.display = 'block';
 
     const btnSave = document.getElementById('btn-save');
-    btnSave.style.display = 'inline-block';
-    btnSave.addEventListener('click', () => {
-        if (btnSave.disabled) return;
-        btnSave.disabled = true;
-        btnSave.textContent = 'Saving…';
-        btnSave.classList.add('saving');
-        statusEl.textContent = 'Uploading…';
-        window.parent.postMessage(
-            { cmd: 'mannequin', type: 'event', method: 'UserSaved' },
-            window.location.origin
-        );
-        setTimeout(() => {
-            btnSave.disabled = false;
-            btnSave.textContent = 'Close & Save';
-            btnSave.classList.remove('saving');
-            if (statusEl.textContent === 'Uploading…') statusEl.textContent = 'Ready';
-        }, 30000);
-    });
+    if (btnSave) {
+        btnSave.style.display = 'inline-block';
+        btnSave.addEventListener('click', () => {
+            if (btnSave.disabled) return;
+            btnSave.disabled = true;
+            btnSave.textContent = 'Saving…';
+            btnSave.classList.add('saving');
+            if (statusEl) statusEl.textContent = 'Uploading…';
+            window.parent.postMessage(
+                { cmd: 'mannequin', type: 'event', method: 'UserSaved' },
+                window.location.origin
+            );
+            setTimeout(() => {
+                btnSave.disabled = false;
+                btnSave.textContent = 'Close & Save';
+                btnSave.classList.remove('saving');
+                if (statusEl && statusEl.textContent === 'Uploading…') statusEl.textContent = 'Ready';
+            }, 30000);
+        });
+    }
 }
 
 // ── Standalone mode ────────────────────────────────────────────────────────────
