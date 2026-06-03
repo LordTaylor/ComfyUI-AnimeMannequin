@@ -430,10 +430,16 @@ export class MannequinRenderer {
     _boneNames() { return BONE_NAMES; }
 
     applyScene(sceneData) {
+        if (!sceneData) return;
         for (const [name, bone] of this._bones) {
             const data = sceneData.bones?.[name];
-            if (!data?.rotation) continue;
-            const [x, y, z, w] = data.rotation;
+            const rot  = data?.rotation;
+            // Only apply a well-formed quaternion. A non-array truthy value (e.g. a
+            // number from a hand-edited / partial imported pose) would otherwise throw
+            // "not iterable"; a wrong-length array would silently NaN the character.
+            if (!Array.isArray(rot) || rot.length < 4) continue;
+            const [x, y, z, w] = rot;
+            if ([x, y, z, w].some(n => typeof n !== 'number' || Number.isNaN(n))) continue;
             bone.quaternion.set(x, y, z, w);
         }
         if (sceneData.camera) {
@@ -446,9 +452,11 @@ export class MannequinRenderer {
     }
 
     _applyCameraFromScene(cam) {
-        const r = cam.distance * WORLD_HEIGHT;
-        const azRad = THREE.MathUtils.degToRad(cam.azimuth);
-        const elRad = THREE.MathUtils.degToRad(cam.elevation);
+        // Defaults so a present-but-partial camera object can't produce a NaN position.
+        const { azimuth = 0, elevation = 5, distance = 2.5 } = cam ?? {};
+        const r = distance * WORLD_HEIGHT;
+        const azRad = THREE.MathUtils.degToRad(azimuth);
+        const elRad = THREE.MathUtils.degToRad(elevation);
         this._camera.position.set(
             r * Math.sin(azRad) * Math.cos(elRad),
             r * Math.sin(elRad) + WORLD_HEIGHT * 0.5,
@@ -457,7 +465,28 @@ export class MannequinRenderer {
         this._camera.lookAt(0, WORLD_HEIGHT * 0.5, 0);
     }
 
-    getSceneData(gender, cameraAzimuth = 0, cameraElevation = 5) {
+    /**
+     * Current orbit-camera angle as {azimuth, elevation, distance} — the exact inverse
+     * of _applyCameraFromScene (target = (0, WORLD_HEIGHT/2, 0)).  Azimuth is clamped to
+     * ±70° (and elevation/distance to sane ranges) so a saved view can drive the output
+     * render without reaching the back of the model, where the GLB mirror/flip handling
+     * would break.
+     */
+    getCameraState() {
+        const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+        const ty = WORLD_HEIGHT * 0.5;
+        const ox = this._camera.position.x;
+        const oy = this._camera.position.y - ty;
+        const oz = this._camera.position.z;
+        const r  = Math.hypot(ox, oy, oz) || 1e-6;
+        return {
+            azimuth:   clamp(THREE.MathUtils.radToDeg(Math.atan2(ox, oz)),          -70, 70),
+            elevation: clamp(THREE.MathUtils.radToDeg(Math.asin(clamp(oy / r, -1, 1))), -30, 60),
+            distance:  clamp(r / WORLD_HEIGHT,                                       1.2, 3.5),
+        };
+    }
+
+    getSceneData(gender) {
         const bones = {};
         for (const [name, obj] of this._bones) {
             const q = obj.quaternion;
@@ -467,7 +496,7 @@ export class MannequinRenderer {
             version: '1.0',
             gender: this._gender,
             bones,
-            camera: { azimuth: cameraAzimuth, elevation: cameraElevation, distance: 2.5 },
+            camera: this.getCameraState(),   // real orbit angle (clamped to safe range)
             proportions: { ...this._proportions },
         };
     }
@@ -605,6 +634,7 @@ export class MannequinRenderer {
             sp.set(name, { x: (p.x * 0.5 + 0.5) * W, y: (-p.y * 0.5 + 0.5) * H });
         }
 
+        const dotR  = Math.max(5, Math.round(W / 70));
         const lineW = Math.max(3, Math.round(W / 90));
 
         function rgb(hex) {
@@ -612,15 +642,29 @@ export class MannequinRenderer {
         }
 
         ctx.lineWidth = lineW;
-        ctx.lineCap = 'butt';
-        ctx.lineJoin = 'miter';
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
 
-        // Draw limb lines only — no joint dots in export
+        // Draw limb lines
         for (const [a, b, col] of SKELETON_LIMBS) {
             const pa = sp.get(a), pb = sp.get(b);
             if (!pa || !pb) continue;
             ctx.strokeStyle = rgb(col);
             ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+        }
+
+        // Draw keypoint dots with correct per-bone COCO-18 colors (not the line color)
+        const drawn = new Set();
+        for (const [a, b] of SKELETON_LIMBS) {
+            for (const k of [a, b]) {
+                if (drawn.has(k)) continue;
+                drawn.add(k);
+                const p = sp.get(k);
+                if (!p) continue;
+                const dotCol = OPENPOSE_COLORS[k] ?? 0xffffff;
+                ctx.fillStyle = rgb(dotCol);
+                ctx.beginPath(); ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2); ctx.fill();
+            }
         }
 
         return canvas.toDataURL('image/png');

@@ -29,12 +29,14 @@ export class ProportionsPanel {
         if (this._panel) this._panel.style.display = this._visible ? 'flex' : 'none';
     }
 
+    show() { this._visible = true;  if (this._panel) this._panel.style.display = 'flex'; }
+    hide() { this._visible = false; if (this._panel) this._panel.style.display = 'none'; }
     isVisible() { return this._visible; }
 
     mount(container) {
         this._panel = document.createElement('div');
         this._panel.style.cssText = [
-            'position:fixed', 'right:0', 'top:0', 'bottom:0', 'width:210px',
+            'position:fixed', 'right:0', 'top:40px', 'bottom:0', 'width:210px',
             'background:#222', 'border-left:1px solid #444', 'z-index:101',
             'display:none', 'flex-direction:column', 'overflow:hidden',
         ].join(';');

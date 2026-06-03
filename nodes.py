@@ -71,13 +71,18 @@ def _dataurl_to_array(data_url: str, width: int, height: int) -> np.ndarray:
     """Decode a PNG data-URL to float32 HxWx3 array, resized to (width, height)."""
     header, b64 = data_url.split(",", 1)
     raw = base64.b64decode(b64)
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
-        f.write(raw)
-        tmp_path = f.name
+    tmp_path = None
     try:
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            f.write(raw)
+            tmp_path = f.name
         arr = load_image(tmp_path, width, height)
     finally:
-        os.unlink(tmp_path)
+        if tmp_path is not None:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
     return arr
 
 
@@ -147,23 +152,57 @@ class AnimeMannequinNode:
 
             rendered = _render_from_scene(scene_str, width, height)
             if rendered:
-                pose     = image_to_tensor(_dataurl_to_array(rendered["pose"],     width, height))
-                openpose = image_to_tensor(_dataurl_to_array(rendered["openpose"], width, height))
+                # headless_render.js uses FK convention: R arm at +X → right side of image
+                # (character viewed from behind).  The GLB renderer faces the camera
+                # (R arm on the LEFT).  Flip headless outputs horizontally when used as
+                # a fallback so they match the GLB front-facing convention.
+                def _flip_h(arr: np.ndarray) -> np.ndarray:
+                    return np.ascontiguousarray(arr[:, ::-1, :])
 
-                # Use GLB mesh renderer for depth/canny if pyrender is available
+                # Single source of truth: the GLB renderer produces pose, depth, canny
+                # AND openpose from the SAME posed joints + same camera.
+                #   pose     = shaded clay render of the model (editor-style screenshot)
+                #   openpose = clean OpenPose skeleton (the ControlNet input)
+                # Both overlay depth exactly — no second (FK) generator, no drift.
+                pose = depth = canny = openpose = None
                 if _GLB_RENDERER_OK:
-                    bone_transforms = rendered.get("bones")
-                    glb_result = render_glb_depth(scene_str, width, height, bone_transforms)
+                    # Wrap the whole GLB path: any failure inside (malformed bone data,
+                    # trimesh/pyrender errors, degenerate mesh) must degrade to the
+                    # headless fallback below — never crash the node.
+                    try:
+                        bone_transforms = rendered.get("bones")
+                        glb_result = render_glb_depth(scene_str, width, height, bone_transforms)
+                    except Exception as e:
+                        print(f"[AnimeMannequin] GLB render failed, falling back: {e}")
+                        glb_result = None
                     if glb_result is not None:
-                        depth_arr, canny_arr = glb_result
+                        pose_arr, depth_arr, canny_arr, openpose_arr = glb_result
+                        pose  = image_to_tensor(pose_arr)
                         depth = image_to_tensor(depth_arr)
                         canny = image_to_tensor(canny_arr)
-                    else:
-                        depth = image_to_tensor(_dataurl_to_array(rendered["depth"], width, height))
-                        canny = image_to_tensor(_dataurl_to_array(rendered["canny"], width, height))
-                else:
-                    depth = image_to_tensor(_dataurl_to_array(rendered["depth"], width, height))
-                    canny = image_to_tensor(_dataurl_to_array(rendered["canny"], width, height))
+                        if openpose_arr is not None:
+                            openpose = image_to_tensor(openpose_arr)
+
+                # Fallbacks (GLB unavailable / failed) — flipped headless outputs.
+                # The subprocess JSON is external: a missing/garbled key must yield a
+                # black frame, not a KeyError/ValueError that crashes this fallback path.
+                def _safe_headless(key: str) -> np.ndarray:
+                    url = rendered.get(key)
+                    if not isinstance(url, str) or "," not in url:
+                        return np.zeros((height, width, 3), dtype=np.float32)
+                    try:
+                        return _flip_h(_dataurl_to_array(url, width, height))
+                    except Exception:
+                        return np.zeros((height, width, 3), dtype=np.float32)
+
+                if depth is None:
+                    depth = image_to_tensor(_safe_headless("depth"))
+                if canny is None:
+                    canny = image_to_tensor(_safe_headless("canny"))
+                if pose is None:
+                    pose = image_to_tensor(_safe_headless("pose"))
+                if openpose is None:
+                    openpose = image_to_tensor(_safe_headless("openpose"))
 
                 return (pose, depth, canny, openpose)
             # Rendering failed — fall through to file-based path
@@ -175,10 +214,15 @@ class AnimeMannequinNode:
         canny_path    = self._safe_join(input_dir, canny_file)
         openpose_path = self._safe_join(input_dir, openpose_file)
 
-        pose     = image_to_tensor(load_image(pose_path,     width, height))
-        depth    = image_to_tensor(load_image(depth_path,    width, height))
-        canny    = image_to_tensor(load_image(canny_path,    width, height))
-        openpose = image_to_tensor(load_image(openpose_path, width, height))
+        def _load_or_blank(path: str) -> np.ndarray:
+            if path and os.path.isfile(path):
+                return load_image(path, width, height)
+            return np.zeros((height, width, 3), dtype=np.float32)
+
+        pose     = image_to_tensor(_load_or_blank(pose_path))
+        depth    = image_to_tensor(_load_or_blank(depth_path))
+        canny    = image_to_tensor(_load_or_blank(canny_path))
+        openpose = image_to_tensor(_load_or_blank(openpose_path))
         return (pose, depth, canny, openpose)
 
 

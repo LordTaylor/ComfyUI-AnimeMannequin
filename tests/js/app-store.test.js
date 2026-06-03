@@ -64,6 +64,25 @@ describe('AppStore', () => {
         expect(store.getState().outputWidth).toBe(768); // other fields untouched
     });
 
+    it('replaceState() with a partial/legacy object does not break getState()', () => {
+        // Regression: a restored state missing `pose` used to throw in getState()
+        // via Object.entries(undefined). replaceState now normalises against defaults.
+        store.replaceState({ gender: 'M' });          // no pose/proportions/bgImage…
+        expect(() => store.getState()).not.toThrow();
+        const s = store.getState();
+        expect(s.gender).toBe('M');
+        expect(s.pose).toEqual({});                   // backfilled
+        expect(s.bgImage).toBeTruthy();               // backfilled
+        expect(s.outputWidth).toBe(768);              // backfilled from defaults
+    });
+
+    it('replaceState() preserves provided nested fields', () => {
+        store.replaceState({ gender: 'F', outputWidth: 512, pose: { neck: { rotation: [0,0,0,1] } } });
+        const s = store.getState();
+        expect(s.outputWidth).toBe(512);
+        expect(s.pose.neck.rotation).toEqual([0,0,0,1]);
+    });
+
     it('setState() is shallow merge — nested objects replaced, not deep-merged', () => {
         store.setState({ proportions: { bust: 2 } });
         // shallow merge: the old proportions object is replaced entirely

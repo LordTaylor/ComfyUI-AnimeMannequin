@@ -134,8 +134,17 @@ describe('_syncFromStore', () => {
         const { store, panel } = mkPanel();
         store.setCropFrame({ opacity: 0.9 });
         const sliders = document.querySelectorAll('input[type="range"]');
-        // sliders: [bgOpacity, bgZoom, cropOpacity]
-        expect(parseFloat(sliders[2].value)).toBeCloseTo(0.9);
+        // sliders: [bgOpacity, bgZoom, bgOffsetX, bgOffsetY, cropOpacity]
+        expect(parseFloat(sliders[4].value)).toBeCloseTo(0.9);
+        panel.dispose();
+    });
+
+    it('bgOffsetX / bgOffsetY sliders update after store change', () => {
+        const { store, panel } = mkPanel();
+        store.setBgImage({ offsetX: 25, offsetY: -10 });
+        const sliders = document.querySelectorAll('input[type="range"]');
+        expect(parseFloat(sliders[2].value)).toBeCloseTo(25);   // Pos X
+        expect(parseFloat(sliders[3].value)).toBeCloseTo(-10);  // Pos Y
         panel.dispose();
     });
 });
