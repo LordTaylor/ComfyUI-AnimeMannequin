@@ -686,7 +686,6 @@ export class MannequinRenderer {
      */
     _computeHandKeypoints(side) {
         const W = this._outputWidth, H = this._outputHeight;
-        const tmp = new THREE.Vector3();
         const project = (v3) => {
             const p = v3.clone().project(this._camera);
             return { x: (p.x * 0.5 + 0.5) * W, y: (-p.y * 0.5 + 0.5) * H };
