@@ -264,7 +264,7 @@ describe('Bug 6 — GLTFLoader sanitizes .name, stripping dots from .L/.R suffix
 
 describe('MESH_MAP finger nodes', () => {
     it('maps every finger bone to a GLB node for F and M', () => {
-        const expect_ = {
+        const expectedNodes = {
             female: {
                 thumb_L:  'GEO-thumb_female_primitive_stylized.L',
                 index_L:  'GEO-finger_index_female_primitive_stylized.L',
@@ -290,7 +290,7 @@ describe('MESH_MAP finger nodes', () => {
                 pinky_R:  'GEO-finger_pinky_male_primitive_stylized.R',
             },
         };
-        for (const [key, bones] of Object.entries(expect_))
+        for (const [key, bones] of Object.entries(expectedNodes))
             for (const [bone, node] of Object.entries(bones))
                 expect(MESH_MAP[key][bone]).toBe(node);
     });

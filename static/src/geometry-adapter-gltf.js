@@ -122,8 +122,16 @@ const SEGMENT_PROPORTION_GROUP = {
     forearm_R:   'arms',
     hand_L:      'arms',
     hand_R:      'arms',
-    thumb_L:     'arms', index_L:  'arms', middle_L: 'arms', ring_L:  'arms', pinky_L: 'arms',
-    thumb_R:     'arms', index_R:  'arms', middle_R: 'arms', ring_R:  'arms', pinky_R: 'arms',
+    thumb_L:     'arms',
+    index_L:     'arms',
+    middle_L:    'arms',
+    ring_L:      'arms',
+    pinky_L:     'arms',
+    thumb_R:     'arms',
+    index_R:     'arms',
+    middle_R:    'arms',
+    ring_R:      'arms',
+    pinky_R:     'arms',
 };
 
 // Cached loaded GLBs — avoids re-fetching on gender toggle
