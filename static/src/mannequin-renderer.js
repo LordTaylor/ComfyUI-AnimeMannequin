@@ -670,6 +670,53 @@ export class MannequinRenderer {
         return canvas.toDataURL('image/png');
     }
 
+    // Finger order and the OpenPose 21-kp index where each finger's 4 points start.
+    static _HAND_FINGERS = [
+        { bone: 'thumb',  start: 1  },
+        { bone: 'index',  start: 5  },
+        { bone: 'middle', start: 9  },
+        { bone: 'ring',   start: 13 },
+        { bone: 'pinky',  start: 17 },
+    ];
+
+    /**
+     * 21 OpenPose hand keypoints in screen space for one side ('L'|'R').
+     * kp[0]=wrist; each finger: base(MCP), 1/3, 2/3, tip. PIP/DIP interpolated,
+     * tip extrapolated from base along the finger direction (finger - wrist).
+     */
+    _computeHandKeypoints(side) {
+        const W = this._outputWidth, H = this._outputHeight;
+        const tmp = new THREE.Vector3();
+        const project = (v3) => {
+            const p = v3.clone().project(this._camera);
+            return { x: (p.x * 0.5 + 0.5) * W, y: (-p.y * 0.5 + 0.5) * H };
+        };
+        const kps = new Array(21).fill(null);
+        const wristBone = this._bones.get(`hand_${side}`);
+        const wristWorld = new THREE.Vector3();
+        if (wristBone) {
+            wristBone.getWorldPosition(wristWorld);
+            kps[0] = project(wristWorld);
+        }
+        for (const { bone, start } of MannequinRenderer._HAND_FINGERS) {
+            const fb = this._bones.get(`${bone}_${side}`);
+            if (!fb) continue;
+            const base = new THREE.Vector3();
+            fb.getWorldPosition(base);
+            const dir = base.clone().sub(wristWorld);
+            const len = dir.length() || 0.04;
+            dir.normalize();
+            const tip = base.clone().add(dir.multiplyScalar(len));
+            const pBase = project(base);
+            const pTip  = project(tip);
+            kps[start]     = pBase;
+            kps[start + 1] = { x: pBase.x + (pTip.x - pBase.x) / 3,     y: pBase.y + (pTip.y - pBase.y) / 3 };
+            kps[start + 2] = { x: pBase.x + (pTip.x - pBase.x) * 2 / 3, y: pBase.y + (pTip.y - pBase.y) * 2 / 3 };
+            kps[start + 3] = pTip;
+        }
+        return kps;
+    }
+
     _fitDepthCamera(W, H) {
         const bbox = new THREE.Box3().setFromObject(this._mannequinRoot);
         const center = bbox.getCenter(new THREE.Vector3());
