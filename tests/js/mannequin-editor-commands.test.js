@@ -299,8 +299,8 @@ describe('applyFingerPreset', () => {
         const after = store.getState().pose;
         expect(after.index_L).toBeDefined();
         expect(after.index_L.w).toBeCloseTo(preset.index_L[3], 5);
-        // a body bone is unchanged
-        expect(after.forearm_L ?? before.forearm_L).toEqual(before.forearm_L ?? after.forearm_L);
+        // a body bone is unchanged (load-bearing: forearm_L was set to a known value above)
+        expect(after.forearm_L).toEqual({ x:0.1, y:0.2, z:0.3, w:0.9 });
     });
 
     it('is undoable', () => {
