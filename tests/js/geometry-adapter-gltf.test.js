@@ -143,14 +143,9 @@ describe('MESH_MAP completeness', () => {
                 expect(MESH_MAP[gender].torso).toBeNull();
             });
 
-            it('all non-torso, non-finger bones map to non-empty strings', () => {
-                const nullOkBones = new Set([
-                    'torso',
-                    'thumb_L','index_L','middle_L','ring_L','pinky_L',
-                    'thumb_R','index_R','middle_R','ring_R','pinky_R',
-                ]);
+            it('all non-torso bones map to non-empty strings', () => {
                 for (const [bone, glbName] of Object.entries(MESH_MAP[gender])) {
-                    if (nullOkBones.has(bone)) continue;
+                    if (bone === 'torso') continue;
                     expect(typeof glbName, `${gender}.${bone} should be a string`).toBe('string');
                     expect(glbName.length, `${gender}.${bone} GLB name is empty`).toBeGreaterThan(0);
                 }
@@ -263,3 +258,27 @@ describe('Bug 6 — GLTFLoader sanitizes .name, stripping dots from .L/.R suffix
 // Bug 3 (A-pose arm rotations discarded) requires a real GLB to be loaded to test.
 // It is verified by integration: with correct fix, arms appear in A-pose (~50° angle).
 // Code path: seg.quaternion.copy(glbNode.quaternion) in buildSegments().
+
+// ── MESH_MAP finger nodes ─────────────────────────────────────────────────────
+// Each finger bone must map to its own GLB node (promoted from EXTRA_NODES).
+
+describe('MESH_MAP finger nodes', () => {
+    it('maps every finger bone to a GLB node for F and M', () => {
+        const expect_ = {
+            female: {
+                thumb_L:  'GEO-thumb_female_primitive_stylized.L',
+                index_L:  'GEO-finger_index_female_primitive_stylized.L',
+                middle_L: 'GEO-finger_middle_female_primitive_stylized.L',
+                ring_L:   'GEO-finger_ring_female_primitive_stylized.L',
+                pinky_L:  'GEO-finger_pinky_female_primitive_stylized.L',
+            },
+            male: {
+                thumb_R:  'GEO-thumb_male_primitive_stylized.R',
+                index_R:  'GEO-finger_index_male_primitive_stylized.R',
+            },
+        };
+        for (const [key, bones] of Object.entries(expect_))
+            for (const [bone, node] of Object.entries(bones))
+                expect(MESH_MAP[key][bone]).toBe(node);
+    });
+});

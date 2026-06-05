@@ -61,20 +61,6 @@ const EXTRA_NODES = {
             { name: 'GEO-nose_female_primitive_stylized',            proportionGroup: 'head' },
             { name: 'GEO-nose_bridge_female_primitive_stylized',     proportionGroup: 'head' },
         ],
-        hand_L: [
-            { name: 'GEO-thumb_female_primitive_stylized.L',         proportionGroup: 'arms' },
-            { name: 'GEO-finger_index_female_primitive_stylized.L',  proportionGroup: 'arms' },
-            { name: 'GEO-finger_middle_female_primitive_stylized.L', proportionGroup: 'arms' },
-            { name: 'GEO-finger_ring_female_primitive_stylized.L',   proportionGroup: 'arms' },
-            { name: 'GEO-finger_pinky_female_primitive_stylized.L',  proportionGroup: 'arms' },
-        ],
-        hand_R: [
-            { name: 'GEO-thumb_female_primitive_stylized.R',         proportionGroup: 'arms' },
-            { name: 'GEO-finger_index_female_primitive_stylized.R',  proportionGroup: 'arms' },
-            { name: 'GEO-finger_middle_female_primitive_stylized.R', proportionGroup: 'arms' },
-            { name: 'GEO-finger_ring_female_primitive_stylized.R',   proportionGroup: 'arms' },
-            { name: 'GEO-finger_pinky_female_primitive_stylized.R',  proportionGroup: 'arms' },
-        ],
         foot_L: [
             { name: 'GEO-toe_big_female_primitive_stylized.L',       proportionGroup: 'legs' },
             { name: 'GEO-toe_index_female_primitive_stylized.L',     proportionGroup: 'legs' },
@@ -98,20 +84,6 @@ const EXTRA_NODES = {
             { name: 'GEO-eye_male_primitive_stylized.R',             proportionGroup: 'head' },
             { name: 'GEO-nose_male_primitive_stylized',              proportionGroup: 'head' },
             { name: 'GEO-nose_bridge_male_primitive_stylized',       proportionGroup: 'head' },
-        ],
-        hand_L: [
-            { name: 'GEO-thumb_male_primitive_stylized.L',           proportionGroup: 'arms' },
-            { name: 'GEO-finger_index_male_primitive_stylized.L',    proportionGroup: 'arms' },
-            { name: 'GEO-finger_middle_male_primitive_stylized.L',   proportionGroup: 'arms' },
-            { name: 'GEO-finger_ring_male_primitive_stylized.L',     proportionGroup: 'arms' },
-            { name: 'GEO-finger_pinky_male_primitive_stylized.L',    proportionGroup: 'arms' },
-        ],
-        hand_R: [
-            { name: 'GEO-thumb_male_primitive_stylized.R',           proportionGroup: 'arms' },
-            { name: 'GEO-finger_index_male_primitive_stylized.R',    proportionGroup: 'arms' },
-            { name: 'GEO-finger_middle_male_primitive_stylized.R',   proportionGroup: 'arms' },
-            { name: 'GEO-finger_ring_male_primitive_stylized.R',     proportionGroup: 'arms' },
-            { name: 'GEO-finger_pinky_male_primitive_stylized.R',    proportionGroup: 'arms' },
         ],
         foot_L: [
             { name: 'GEO-toe_big_male_primitive_stylized.L',         proportionGroup: 'legs' },
@@ -150,6 +122,8 @@ const SEGMENT_PROPORTION_GROUP = {
     forearm_R:   'arms',
     hand_L:      'arms',
     hand_R:      'arms',
+    thumb_L:     'arms', index_L:  'arms', middle_L: 'arms', ring_L:  'arms', pinky_L: 'arms',
+    thumb_R:     'arms', index_R:  'arms', middle_R: 'arms', ring_R:  'arms', pinky_R: 'arms',
 };
 
 // Cached loaded GLBs — avoids re-fetching on gender toggle
@@ -285,9 +259,17 @@ export const MESH_MAP = {
         thigh_R:     'GEO-leg_upper_male_primitive_stylized.R',
         shin_R:      'GEO-leg_lower_male_primitive_stylized.R',
         foot_R:      'GEO-foot_male_primitive_stylized.R',
-        // Finger bones: FK pivots — geometry rendered via EXTRA_NODES on hand_L/hand_R
-        thumb_L: null, index_L: null, middle_L: null, ring_L: null, pinky_L: null,
-        thumb_R: null, index_R: null, middle_R: null, ring_R: null, pinky_R: null,
+        // Finger bones: FK pivots — own GLB node per finger
+        thumb_L:  'GEO-thumb_male_primitive_stylized.L',
+        index_L:  'GEO-finger_index_male_primitive_stylized.L',
+        middle_L: 'GEO-finger_middle_male_primitive_stylized.L',
+        ring_L:   'GEO-finger_ring_male_primitive_stylized.L',
+        pinky_L:  'GEO-finger_pinky_male_primitive_stylized.L',
+        thumb_R:  'GEO-thumb_male_primitive_stylized.R',
+        index_R:  'GEO-finger_index_male_primitive_stylized.R',
+        middle_R: 'GEO-finger_middle_male_primitive_stylized.R',
+        ring_R:   'GEO-finger_ring_male_primitive_stylized.R',
+        pinky_R:  'GEO-finger_pinky_male_primitive_stylized.R',
     },
     female: {
         torso:       null,
@@ -310,9 +292,17 @@ export const MESH_MAP = {
         thigh_R:     'GEO-leg_upper_female_primitive_stylized.R',
         shin_R:      'GEO-leg_lower_female_primitive_stylized.R',
         foot_R:      'GEO-foot_female_primitive_stylized.R',
-        // Finger bones: FK pivots — geometry rendered via EXTRA_NODES on hand_L/hand_R
-        thumb_L: null, index_L: null, middle_L: null, ring_L: null, pinky_L: null,
-        thumb_R: null, index_R: null, middle_R: null, ring_R: null, pinky_R: null,
+        // Finger bones: FK pivots — own GLB node per finger
+        thumb_L:  'GEO-thumb_female_primitive_stylized.L',
+        index_L:  'GEO-finger_index_female_primitive_stylized.L',
+        middle_L: 'GEO-finger_middle_female_primitive_stylized.L',
+        ring_L:   'GEO-finger_ring_female_primitive_stylized.L',
+        pinky_L:  'GEO-finger_pinky_female_primitive_stylized.L',
+        thumb_R:  'GEO-thumb_female_primitive_stylized.R',
+        index_R:  'GEO-finger_index_female_primitive_stylized.R',
+        middle_R: 'GEO-finger_middle_female_primitive_stylized.R',
+        ring_R:   'GEO-finger_ring_female_primitive_stylized.R',
+        pinky_R:  'GEO-finger_pinky_female_primitive_stylized.R',
     },
 };
 
