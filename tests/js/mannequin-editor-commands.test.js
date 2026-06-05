@@ -59,6 +59,28 @@ vi.mock('../../static/src/mannequin-model.js', () => ({
     defaultProportions: () => ({ head:1, bust:1, hips:1, waist:1, legs:1, arms:1 }),
 }));
 
+vi.mock('../../static/src/finger-presets.js', () => ({
+    buildPresetPose: (name) => {
+        if (name === 'Pięść') {
+            return {
+                thumb_L:  [0.5, 0, 0, 0.866],
+                index_L:  [0.7, 0, 0, 0.714],
+                middle_L: [0.7, 0, 0, 0.714],
+                ring_L:   [0.7, 0, 0, 0.714],
+                pinky_L:  [0.7, 0, 0, 0.714],
+                thumb_R:  [-0.5, 0, 0, 0.866],
+                index_R:  [-0.7, 0, 0, 0.714],
+                middle_R: [-0.7, 0, 0, 0.714],
+                ring_R:   [-0.7, 0, 0, 0.714],
+                pinky_R:  [-0.7, 0, 0, 0.714],
+            };
+        }
+        throw new Error(`Unknown finger preset: ${name}`);
+    },
+    FINGER_BONES: ['thumb_L','index_L','middle_L','ring_L','pinky_L',
+                   'thumb_R','index_R','middle_R','ring_R','pinky_R'],
+}));
+
 vi.mock('../../static/src/mannequin-renderer.js', () => ({
     BUST_DEFAULTS: { loc_z_base:0, loc_z:0.65, glob_z:0.2, loc_x:0.18, loc_y:0.3, glob_y_base:0.0, glob_y:0.0,
                      rot_x:0.6, rot_z:-0.5, rot_y:0.5, grot_x:0.0, grot_y:0.0, grot_z:0.0, scale_x:1.0 },
@@ -95,6 +117,7 @@ function mkRenderer(boneNames = []) {
 }
 
 const { MannequinEditor } = await import('../../static/src/mannequin-editor.js');
+const { buildPresetPose } = await import('../../static/src/finger-presets.js');
 
 function mkEditor(boneNames = []) {
     const store    = mkStore();
@@ -261,5 +284,40 @@ describe('_applyPoseFromStore', () => {
         const canvas = { addEventListener(){} };
         const editor = new MannequinEditor(renderer, canvas, null);
         expect(() => editor._applyPoseFromStore()).not.toThrow();
+    });
+});
+
+// ── applyFingerPreset ─────────────────────────────────────────────────────────
+
+describe('applyFingerPreset', () => {
+    it('sets finger quaternions in the store and leaves body bones untouched', () => {
+        const { editor, store } = mkEditor(['index_L', 'forearm_L']);
+        store.setPoseBone('forearm_L', { x:0.1, y:0.2, z:0.3, w:0.9 });
+        const before = store.getState().pose;
+        const preset = buildPresetPose('Pięść');
+        editor.applyFingerPreset(preset);
+        const after = store.getState().pose;
+        expect(after.index_L).toBeDefined();
+        expect(after.index_L.w).toBeCloseTo(preset.index_L[3], 5);
+        // a body bone is unchanged
+        expect(after.forearm_L ?? before.forearm_L).toEqual(before.forearm_L ?? after.forearm_L);
+    });
+
+    it('is undoable', () => {
+        const { editor, store } = mkEditor(['index_L', 'index_R']);
+        const before = JSON.stringify(store.getState().pose);
+        editor.applyFingerPreset(buildPresetPose('Pięść'));
+        editor.undo();
+        expect(JSON.stringify(store.getState().pose)).toBe(before);
+    });
+});
+
+// ── MIRROR_PAIRS fingers ──────────────────────────────────────────────────────
+
+describe('MIRROR_PAIRS fingers', () => {
+    it('includes all 5 finger pairs', () => {
+        const flat = MannequinEditor.MIRROR_PAIRS.map(p => p.join('|'));
+        for (const f of ['thumb','index','middle','ring','pinky'])
+            expect(flat).toContain(`${f}_L|${f}_R`);
     });
 });

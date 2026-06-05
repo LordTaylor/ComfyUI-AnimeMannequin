@@ -172,6 +172,9 @@ export class MannequinEditor {
         ['forearm_L',  'forearm_R'],  ['hand_L',      'hand_R'],
         ['thigh_L',    'thigh_R'],    ['shin_L',      'shin_R'],
         ['foot_L',     'foot_R'],
+        ['thumb_L',  'thumb_R'],  ['index_L', 'index_R'],
+        ['middle_L', 'middle_R'], ['ring_L',  'ring_R'],
+        ['pinky_L',  'pinky_R'],
     ];
 
     mirrorPose(direction = 'L_to_R') {
@@ -210,6 +213,26 @@ export class MannequinEditor {
         }
         if (this._store) this._history.execute(new ResetPoseCommand(prevPose, nextPose), this._store);
         this._renderer.applyScene(sceneData);
+        this._renderer.markDirty();
+    }
+
+    /**
+     * Apply a finger preset (map { boneName: [x,y,z,w] } over the 10 finger bones).
+     * Body bones are preserved. Commits a ResetPoseCommand so undo/redo works.
+     */
+    applyFingerPreset(presetPose) {
+        const prevPose = this._store?.getState().pose ?? {};
+        const nextPose = { ...prevPose };
+        for (const [name, rot] of Object.entries(presetPose)) {
+            if (!Array.isArray(rot) || rot.length < 4) continue;
+            const [x, y, z, w] = rot;
+            nextPose[name] = { x, y, z, w };
+            const bone = this._renderer.bones.get(name);
+            if (bone) bone.quaternion.set(x, y, z, w);
+        }
+        if (this._store) {
+            this._history.execute(new ResetPoseCommand(prevPose, nextPose), this._store);
+        }
         this._renderer.markDirty();
     }
 
