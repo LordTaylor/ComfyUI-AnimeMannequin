@@ -309,6 +309,7 @@ if (mode === 'standalone') {
     withFeedback(document.getElementById('btn-dl-pose'),  () => { const { pose }  = renderer.captureImages(); download(pose,  'pose.png');  });
     withFeedback(document.getElementById('btn-dl-depth'), () => { const { depth } = renderer.captureImages(); download(depth, 'depth.png'); });
     withFeedback(document.getElementById('btn-dl-canny'), () => { const { canny } = renderer.captureImages(); download(canny, 'canny.png'); });
+    withFeedback(document.getElementById('btn-dl-hands'), () => { const { hands } = renderer.captureImages(); download(hands, 'hands.png'); });
 }
 
 // ── Crop frame ─────────────────────────────────────────────────────────────────
