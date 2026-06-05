@@ -5,11 +5,11 @@ import {
 } from '../../static/src/mannequin-model.js';
 
 describe('BONE_NAMES', () => {
-    it('contains exactly 20 bones', () => {
-        expect(BONE_NAMES).toHaveLength(20);
+    it('contains exactly 30 bones (20 body + 10 fingers)', () => {
+        expect(BONE_NAMES).toHaveLength(30);
     });
 
-    it('contains all required bones', () => {
+    it('contains all required body bones', () => {
         const required = [
             'torso','spine','chest','neck','head',
             'shoulder_L','upper_arm_L','forearm_L','hand_L',
@@ -18,6 +18,14 @@ describe('BONE_NAMES', () => {
             'thigh_R','shin_R','foot_R'
         ];
         for (const b of required) expect(BONE_NAMES).toContain(b);
+    });
+
+    it('contains 10 finger bones (5 per hand)', () => {
+        const fingers = [
+            'thumb_L','index_L','middle_L','ring_L','pinky_L',
+            'thumb_R','index_R','middle_R','ring_R','pinky_R',
+        ];
+        for (const f of fingers) expect(BONE_NAMES).toContain(f);
     });
 });
 
@@ -31,6 +39,30 @@ describe('BONE_CHILDREN', () => {
     it('pelvis has thigh_L and thigh_R', () => {
         expect(BONE_CHILDREN.pelvis).toContain('thigh_L');
         expect(BONE_CHILDREN.pelvis).toContain('thigh_R');
+    });
+});
+
+describe('BONE_CHILDREN finger hierarchy', () => {
+    it('hand_L has 5 finger children, hand_R too', () => {
+        for (const f of ['thumb_L','index_L','middle_L','ring_L','pinky_L'])
+            expect(BONE_CHILDREN.hand_L).toContain(f);
+        for (const f of ['thumb_R','index_R','middle_R','ring_R','pinky_R'])
+            expect(BONE_CHILDREN.hand_R).toContain(f);
+    });
+
+    it('each finger bone is a leaf', () => {
+        for (const f of ['thumb_L','index_L','middle_L','ring_L','pinky_L',
+                         'thumb_R','index_R','middle_R','ring_R','pinky_R'])
+            expect(BONE_CHILDREN[f]).toEqual([]);
+    });
+});
+
+describe('PROPORTIONS finger entries', () => {
+    it('F and M have all 10 finger bones with radius', () => {
+        for (const g of ['F','M'])
+            for (const f of ['thumb_L','index_L','middle_L','ring_L','pinky_L',
+                             'thumb_R','index_R','middle_R','ring_R','pinky_R'])
+                expect(PROPORTIONS[g][f]).toHaveProperty('radius');
     });
 });
 

@@ -143,9 +143,14 @@ describe('MESH_MAP completeness', () => {
                 expect(MESH_MAP[gender].torso).toBeNull();
             });
 
-            it('all non-torso bones map to non-empty strings', () => {
+            it('all non-torso, non-finger bones map to non-empty strings', () => {
+                const nullOkBones = new Set([
+                    'torso',
+                    'thumb_L','index_L','middle_L','ring_L','pinky_L',
+                    'thumb_R','index_R','middle_R','ring_R','pinky_R',
+                ]);
                 for (const [bone, glbName] of Object.entries(MESH_MAP[gender])) {
-                    if (bone === 'torso') continue;
+                    if (nullOkBones.has(bone)) continue;
                     expect(typeof glbName, `${gender}.${bone} should be a string`).toBe('string');
                     expect(glbName.length, `${gender}.${bone} GLB name is empty`).toBeGreaterThan(0);
                 }

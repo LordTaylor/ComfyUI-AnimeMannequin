@@ -5,6 +5,8 @@ export const BONE_NAMES = [
     'pelvis',
     'thigh_L', 'shin_L', 'foot_L',
     'thigh_R', 'shin_R', 'foot_R',
+    'thumb_L', 'index_L', 'middle_L', 'ring_L', 'pinky_L',
+    'thumb_R', 'index_R', 'middle_R', 'ring_R', 'pinky_R',
 ];
 
 export const BONE_CHILDREN = {
@@ -16,11 +18,13 @@ export const BONE_CHILDREN = {
     shoulder_L: ['upper_arm_L'],
     upper_arm_L: ['forearm_L'],
     forearm_L:  ['hand_L'],
-    hand_L:     [],
+    hand_L:     ['thumb_L', 'index_L', 'middle_L', 'ring_L', 'pinky_L'],
+    thumb_L: [], index_L: [], middle_L: [], ring_L: [], pinky_L: [],
     shoulder_R: ['upper_arm_R'],
     upper_arm_R: ['forearm_R'],
     forearm_R:  ['hand_R'],
-    hand_R:     [],
+    hand_R:     ['thumb_R', 'index_R', 'middle_R', 'ring_R', 'pinky_R'],
+    thumb_R: [], index_R: [], middle_R: [], ring_R: [], pinky_R: [],
     pelvis:    ['thigh_L', 'thigh_R'],
     thigh_L:   ['shin_L'],
     shin_L:    ['foot_L'],
@@ -53,6 +57,10 @@ export const PROPORTIONS = {
         thigh_R:     { length: 0.230, radius: 0.042 },
         shin_R:      { length: 0.210, radius: 0.032 },
         foot_R:      { length: 0.080, radius: 0.028 },
+        thumb_L: { radius: 0.012 }, index_L: { radius: 0.011 }, middle_L: { radius: 0.011 },
+        ring_L:  { radius: 0.010 }, pinky_L: { radius: 0.009 },
+        thumb_R: { radius: 0.012 }, index_R: { radius: 0.011 }, middle_R: { radius: 0.011 },
+        ring_R:  { radius: 0.010 }, pinky_R: { radius: 0.009 },
         shoulderSpan: 0.270,
     },
     M: {
@@ -76,6 +84,10 @@ export const PROPORTIONS = {
         thigh_R:     { length: 0.220, radius: 0.048 },
         shin_R:      { length: 0.210, radius: 0.038 },
         foot_R:      { length: 0.085, radius: 0.032 },
+        thumb_L: { radius: 0.012 }, index_L: { radius: 0.011 }, middle_L: { radius: 0.011 },
+        ring_L:  { radius: 0.010 }, pinky_L: { radius: 0.009 },
+        thumb_R: { radius: 0.012 }, index_R: { radius: 0.011 }, middle_R: { radius: 0.011 },
+        ring_R:  { radius: 0.010 }, pinky_R: { radius: 0.009 },
         shoulderSpan: 0.340,
     },
 };

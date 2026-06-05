@@ -285,6 +285,9 @@ export const MESH_MAP = {
         thigh_R:     'GEO-leg_upper_male_primitive_stylized.R',
         shin_R:      'GEO-leg_lower_male_primitive_stylized.R',
         foot_R:      'GEO-foot_male_primitive_stylized.R',
+        // Finger bones: FK pivots — geometry rendered via EXTRA_NODES on hand_L/hand_R
+        thumb_L: null, index_L: null, middle_L: null, ring_L: null, pinky_L: null,
+        thumb_R: null, index_R: null, middle_R: null, ring_R: null, pinky_R: null,
     },
     female: {
         torso:       null,
@@ -307,6 +310,9 @@ export const MESH_MAP = {
         thigh_R:     'GEO-leg_upper_female_primitive_stylized.R',
         shin_R:      'GEO-leg_lower_female_primitive_stylized.R',
         foot_R:      'GEO-foot_female_primitive_stylized.R',
+        // Finger bones: FK pivots — geometry rendered via EXTRA_NODES on hand_L/hand_R
+        thumb_L: null, index_L: null, middle_L: null, ring_L: null, pinky_L: null,
+        thumb_R: null, index_R: null, middle_R: null, ring_R: null, pinky_R: null,
     },
 };
 
