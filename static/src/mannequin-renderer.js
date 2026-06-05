@@ -27,6 +27,11 @@ export const BUST_DEFAULTS = {
 
 
 
+// OpenPose hand: per-finger color; chain wrist→base→j1→j2→tip.
+const HAND_FINGER_COLORS = {
+    thumb:  '#ff0000', index: '#ffaa00', middle: '#00ff00', ring: '#00aaff', pinky: '#aa00ff',
+};
+
 // COCO 18 limb connections — COCO standard (direct shoulder→elbow, hip→knee, etc.)
 // Colors per Openpose-18-keypoints_coco_color_codes_v13 (100 % brightness joint colors).
 // Each entry: [boneA, boneB, lineColorHex]
@@ -615,7 +620,8 @@ export class MannequinRenderer {
         this._dirty = true;
         // pose   = 2D OpenPose skeleton on black bg   → for OpenPose ControlNet
         // openpose = 3D body + skeleton overlay        → visual reference
-        return { pose: poseDataUrl, depth: depthDataUrl, canny: cannyDataUrl, openpose: refDataUrl };
+        const handsDataUrl = this._captureHands(W, H);
+        return { pose: poseDataUrl, depth: depthDataUrl, canny: cannyDataUrl, openpose: refDataUrl, hands: handsDataUrl };
     }
 
     _captureOpenPose(W, H) {
@@ -667,7 +673,42 @@ export class MannequinRenderer {
             }
         }
 
+        for (const side of ['L', 'R']) this._drawHand(ctx, this._computeHandKeypoints(side), W);
+
         return canvas.toDataURL('image/png');
+    }
+
+    _captureHands(W, H) {
+        const canvas = document.createElement('canvas');
+        canvas.width = W; canvas.height = H;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, W, H);
+        for (const side of ['L', 'R']) this._drawHand(ctx, this._computeHandKeypoints(side), W);
+        return canvas.toDataURL('image/png');
+    }
+
+    /** Draw one hand's 21 keypoints + bones onto ctx. */
+    _drawHand(ctx, kps, W) {
+        if (!kps || !kps[0]) return;
+        const lineW = Math.max(2, Math.round(W / 140));
+        const dotR  = Math.max(3, Math.round(W / 180));
+        ctx.lineWidth = lineW; ctx.lineCap = 'round';
+        for (const { bone, start } of MannequinRenderer._HAND_FINGERS) {
+            ctx.strokeStyle = HAND_FINGER_COLORS[bone];
+            const chain = [kps[0], kps[start], kps[start + 1], kps[start + 2], kps[start + 3]];
+            for (let i = 0; i < chain.length - 1; i++) {
+                const a = chain[i], b = chain[i + 1];
+                if (!a || !b) continue;
+                ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+            }
+        }
+        for (let i = 0; i < kps.length; i++) {
+            const p = kps[i];
+            if (!p) continue;
+            ctx.fillStyle = i === 0 ? '#ffffff' : '#dddddd';
+            ctx.beginPath(); ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2); ctx.fill();
+        }
     }
 
     // Finger order and the OpenPose 21-kp index where each finger's 4 points start.

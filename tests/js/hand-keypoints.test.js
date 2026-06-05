@@ -17,6 +17,26 @@ function makeCamera() {
     return cam;
 }
 
+describe('_captureHands', () => {
+    it('returns a PNG data-URL drawn from both hands', () => {
+        const r = Object.create(MannequinRenderer.prototype);
+        r._camera = makeCamera();
+        r._outputWidth = 64;
+        r._outputHeight = 64;
+        r._bones = new Map([
+            ['hand_L',  fakeBone(-0.2, 1, 0)], ['index_L', fakeBone(-0.25, 1.1, 0)],
+            ['thumb_L', fakeBone(-0.15, 1.05, 0)], ['middle_L', fakeBone(-0.25, 1.12, 0)],
+            ['ring_L',  fakeBone(-0.25, 1.1, 0)], ['pinky_L', fakeBone(-0.25, 1.08, 0)],
+            ['hand_R',  fakeBone(0.2, 1, 0)],  ['index_R', fakeBone(0.25, 1.1, 0)],
+            ['thumb_R', fakeBone(0.15, 1.05, 0)], ['middle_R', fakeBone(0.25, 1.12, 0)],
+            ['ring_R',  fakeBone(0.25, 1.1, 0)], ['pinky_R', fakeBone(0.25, 1.08, 0)],
+        ]);
+        const url = r._captureHands(64, 64);
+        expect(typeof url).toBe('string');
+        expect(url.startsWith('data:image/png')).toBe(true);
+    });
+});
+
 describe('_computeHandKeypoints', () => {
     it('returns 21 points with wrist first, each having x and y', () => {
         const r = Object.create(MannequinRenderer.prototype);
