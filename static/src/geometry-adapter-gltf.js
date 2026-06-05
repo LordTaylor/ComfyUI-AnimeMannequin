@@ -39,10 +39,11 @@ export const OPENPOSE_COLORS = {
 
 // GLB sub-meshes that attach to a bone without their own FK pivot.
 // These are children of the bone's GLB node (e.g. breasts hang on chest).
-// Sub-meshes rigidly attached to a bone (breasts, face parts, fingers, toes).
-// Kept in sync with the Python renderer's EXTRA_NODES (glb_renderer.py) so the
-// editor preview matches the API output exactly. Fingers/toes are rigid — they
-// move with the parent hand/foot bone but are not individually posable.
+// Sub-meshes rigidly attached to a bone (breasts, face parts, toes): they move
+// with the parent bone and are not individually posable.
+// NOTE: fingers used to live here too, but are now first-class posable bones
+// (see MESH_MAP). The Python renderer (glb_renderer.py) still treats fingers as
+// rigid EXTRA_NODES — that path is reconciled separately in Plan 1b.
 const EXTRA_NODES = {
     female: {
         chest: [
