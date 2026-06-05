@@ -271,10 +271,23 @@ describe('MESH_MAP finger nodes', () => {
                 middle_L: 'GEO-finger_middle_female_primitive_stylized.L',
                 ring_L:   'GEO-finger_ring_female_primitive_stylized.L',
                 pinky_L:  'GEO-finger_pinky_female_primitive_stylized.L',
+                thumb_R:  'GEO-thumb_female_primitive_stylized.R',
+                index_R:  'GEO-finger_index_female_primitive_stylized.R',
+                middle_R: 'GEO-finger_middle_female_primitive_stylized.R',
+                ring_R:   'GEO-finger_ring_female_primitive_stylized.R',
+                pinky_R:  'GEO-finger_pinky_female_primitive_stylized.R',
             },
             male: {
+                thumb_L:  'GEO-thumb_male_primitive_stylized.L',
+                index_L:  'GEO-finger_index_male_primitive_stylized.L',
+                middle_L: 'GEO-finger_middle_male_primitive_stylized.L',
+                ring_L:   'GEO-finger_ring_male_primitive_stylized.L',
+                pinky_L:  'GEO-finger_pinky_male_primitive_stylized.L',
                 thumb_R:  'GEO-thumb_male_primitive_stylized.R',
                 index_R:  'GEO-finger_index_male_primitive_stylized.R',
+                middle_R: 'GEO-finger_middle_male_primitive_stylized.R',
+                ring_R:   'GEO-finger_ring_male_primitive_stylized.R',
+                pinky_R:  'GEO-finger_pinky_male_primitive_stylized.R',
             },
         };
         for (const [key, bones] of Object.entries(expect_))
