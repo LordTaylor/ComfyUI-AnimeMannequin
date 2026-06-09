@@ -47,7 +47,7 @@ vi.mock('../../static/lib/GLTFLoader.js', () => ({
 
 // ── Import testable exports ───────────────────────────────────────────────────
 
-import { WORLD_HEIGHT, MESH_MAP, makeToonMat, jointRadiiFor } from '../../static/src/geometry-adapter-gltf.js';
+import { WORLD_HEIGHT, MESH_MAP, makeToonMat, jointRadiiFor, HAND_NODE_MAP } from '../../static/src/geometry-adapter-gltf.js';
 import { BONE_NAMES } from '../../static/src/mannequin-model.js';
 
 // ── Bug 1: Bone positions not centered ───────────────────────────────────────
@@ -251,6 +251,27 @@ describe('Bug 6 — GLTFLoader sanitizes .name, stripping dots from .L/.R suffix
         const mapKey = node.userData.name || node.name;
         expect(mapKey).toBe(originalName);
         expect(mapKey).toBe(MESH_MAP.female.upper_arm_L);
+    });
+});
+
+// ── HAND_NODE_MAP — left-hand phalange → hand.glb node ───────────────────────
+
+describe('HAND_NODE_MAP (left-hand phalange → hand.glb node)', () => {
+    it('maps all 14 left phalange bones', () => {
+        const bones = ['index_L_1','index_L_2','index_L_3','middle_L_1','middle_L_2','middle_L_3',
+            'ring_L_1','ring_L_2','ring_L_3','pinky_L_1','pinky_L_2','pinky_L_3','thumb_L_1','thumb_L_2'];
+        for (const b of bones) expect(typeof HAND_NODE_MAP[b]).toBe('string');
+        expect(Object.keys(HAND_NODE_MAP)).toHaveLength(14);
+    });
+    it('orders proximal→distal: _2 is the .002 node, _3 is the .001 (tip) node', () => {
+        expect(HAND_NODE_MAP.index_L_1).toBe('GEO-finger_index_female_primitive_stylized.L');
+        expect(HAND_NODE_MAP.index_L_2).toBe('GEO-finger_index_female_primitive_stylized.L.002');
+        expect(HAND_NODE_MAP.index_L_3).toBe('GEO-finger_index_female_primitive_stylized.L.001');
+        expect(HAND_NODE_MAP.thumb_L_1).toBe('GEO-thumb_female_primitive_stylized.L');
+        expect(HAND_NODE_MAP.thumb_L_2).toBe('GEO-thumb_female_primitive_stylized.L.001');
+    });
+    it('contains no right-hand bones (hand.glb is left-only)', () => {
+        for (const k of Object.keys(HAND_NODE_MAP)) expect(k).not.toMatch(/_R_|_R$/);
     });
 });
 

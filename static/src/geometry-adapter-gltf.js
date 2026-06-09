@@ -341,6 +341,42 @@ export const MESH_MAP = {
     },
 };
 
+// Left-hand phalange bone → node name in hand.glb (segmented left hand).
+// Ordering proximal→distal: base, then .002 (middle), then .001 (tip).
+export const HAND_NODE_MAP = {
+    index_L_1:  'GEO-finger_index_female_primitive_stylized.L',
+    index_L_2:  'GEO-finger_index_female_primitive_stylized.L.002',
+    index_L_3:  'GEO-finger_index_female_primitive_stylized.L.001',
+    middle_L_1: 'GEO-finger_middle_female_primitive_stylized.L',
+    middle_L_2: 'GEO-finger_middle_female_primitive_stylized.L.002',
+    middle_L_3: 'GEO-finger_middle_female_primitive_stylized.L.001',
+    ring_L_1:   'GEO-finger_ring_female_primitive_stylized.L',
+    ring_L_2:   'GEO-finger_ring_female_primitive_stylized.L.002',
+    ring_L_3:   'GEO-finger_ring_female_primitive_stylized.L.001',
+    pinky_L_1:  'GEO-finger_pinky_female_primitive_stylized.L',
+    pinky_L_2:  'GEO-finger_pinky_female_primitive_stylized.L.002',
+    pinky_L_3:  'GEO-finger_pinky_female_primitive_stylized.L.001',
+    thumb_L_1:  'GEO-thumb_female_primitive_stylized.L',
+    thumb_L_2:  'GEO-thumb_female_primitive_stylized.L.001',
+};
+
+export const HAND_PALM_NODE = 'GEO-hand_female_primitive_stylized.L';
+
+let _handGLBCache = null;
+export async function loadHandGLB() {
+    if (_handGLBCache) return _handGLBCache;
+    const loader = new GLTFLoader();
+    const gltf = await loader.loadAsync('./assets/hand.glb');
+    gltf.scene.updateMatrixWorld(true);
+    const nodeMap = new Map();
+    gltf.scene.traverse(obj => {
+        const name = obj.userData.name || obj.name;
+        if (name) nodeMap.set(name, obj);
+    });
+    _handGLBCache = nodeMap;
+    return nodeMap;
+}
+
 async function loadGLB(gender) {
     if (gender === 'custom') return _customGLB?.nodeMap ?? new Map();
     const key = gender === 'F' ? 'female' : 'male';
