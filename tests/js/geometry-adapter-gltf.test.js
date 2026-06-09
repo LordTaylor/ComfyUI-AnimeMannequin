@@ -292,8 +292,8 @@ describe('jointRadiiFor', () => {
         expect(r.hitR).toBeCloseTo(0.12, 5);
     });
 
-    it('returns much smaller radii for finger bones', () => {
-        const f = jointRadiiFor('F', 'index_L');
+    it('returns much smaller radii for phalange bones', () => {
+        const f = jointRadiiFor('F', 'index_L_1');
         expect(f.jointR).toBeLessThan(0.03);
         expect(f.hitR).toBeLessThan(0.06);
         // smaller than a body joint
@@ -306,7 +306,7 @@ describe('jointRadiiFor', () => {
     });
 
     it('falls back gracefully for unknown gender / missing radius', () => {
-        const r = jointRadiiFor('custom', 'index_L');
+        const r = jointRadiiFor('custom', 'index_L_1');
         expect(r.jointR).toBeGreaterThan(0);
         expect(r.hitR).toBeGreaterThan(r.jointR);
     });

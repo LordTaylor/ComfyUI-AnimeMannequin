@@ -14,8 +14,12 @@ const HIT_RADIUS   = 0.12;  // invisible larger sphere for easier click detectio
 // Bones whose joints must be scaled down to the bone thickness (thin parts:
 // fingers + hands). Everything else keeps the default body joint size.
 const SMALL_JOINT_BONES = new Set([
-    'thumb_L','index_L','middle_L','ring_L','pinky_L',
-    'thumb_R','index_R','middle_R','ring_R','pinky_R',
+    'index_L_1','index_L_2','index_L_3','middle_L_1','middle_L_2','middle_L_3',
+    'ring_L_1','ring_L_2','ring_L_3','pinky_L_1','pinky_L_2','pinky_L_3',
+    'thumb_L_1','thumb_L_2',
+    'index_R_1','index_R_2','index_R_3','middle_R_1','middle_R_2','middle_R_3',
+    'ring_R_1','ring_R_2','ring_R_3','pinky_R_1','pinky_R_2','pinky_R_3',
+    'thumb_R_1','thumb_R_2',
     'hand_L','hand_R',
 ]);
 
