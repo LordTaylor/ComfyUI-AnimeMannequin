@@ -36,8 +36,8 @@ export function jointRadiiFor(gender, boneName) {
     const set = (gender === 'M') ? PROPORTIONS.M : PROPORTIONS.F;
     const r = set?.[boneName]?.radius ?? 0.011;
     return {
-        jointR: Math.max(0.012, r * 1.6),
-        hitR:   Math.max(0.025, r * 3.2),
+        jointR: Math.max(0.0096, r * 1.28),  // −20 % vs first pass (visual tuning)
+        hitR:   Math.max(0.025, r * 3.2),    // hit target kept for clickability
     };
 }
 
