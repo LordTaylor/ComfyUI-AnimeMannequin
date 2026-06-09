@@ -456,6 +456,8 @@ export async function buildSegments(gender) {
     const key      = isCustom ? null : (gender === 'F' ? 'female' : 'male');
     const boneMap  = isCustom ? (_customGLB?.meshMap ?? {}) : MESH_MAP[key];
     const nodeMap  = await loadGLB(gender);
+    // Segmented hand (hand.glb) supplies finger phalange geometry. Left hand only for now.
+    const handNodeMap = (key === 'female') ? await loadHandGLB() : null;
     const { charScale } = await getCharacterScaleInfo(gender);
     const groups = new Map();
 
@@ -517,6 +519,33 @@ export async function buildSegments(gender) {
                     seg.scale.set(worldS.x * charScale, worldS.y * charScale, worldS.z * charScale);
                     seg.userData._baseScale    = { x: seg.scale.x, y: seg.scale.y, z: seg.scale.z };
                     seg.userData._basePosition = { x: 0, y: 0, z: 0 }; // at bone pivot — no offset
+                    group.add(seg);
+                }
+            }
+        }
+
+        // Phalange segment from hand.glb (left hand). The bone pivot sits at the joint
+        // (hand.glb origins are at the proximal joint), so geometry attaches at offset 0
+        // and rotating the bone curls the segment about the joint — same convention as body.
+        const handNodeName = handNodeMap ? HAND_NODE_MAP[boneName] : null;
+        if (handNodeName) {
+            const hNode = handNodeMap.get(handNodeName);
+            if (hNode) {
+                let meshNode = hNode.isMesh ? hNode : null;
+                if (!meshNode) hNode.traverse(c => { if (!meshNode && c.isMesh) meshNode = c; });
+                if (meshNode) {
+                    const seg = new THREE.Mesh(meshNode.geometry.clone(), makeToonMat(SEGMENT_COLOR));
+                    seg.userData.boneName        = boneName;
+                    seg.userData.proportionGroup = SEGMENT_PROPORTION_GROUP[boneName] ?? null;
+                    seg.position.set(0, 0, 0);
+                    const wQ = new THREE.Quaternion();
+                    hNode.getWorldQuaternion(wQ);
+                    seg.quaternion.copy(wQ);
+                    const wS = new THREE.Vector3();
+                    hNode.getWorldScale(wS);
+                    seg.scale.set(wS.x * charScale, wS.y * charScale, wS.z * charScale);
+                    seg.userData._baseScale    = { x: seg.scale.x, y: seg.scale.y, z: seg.scale.z };
+                    seg.userData._basePosition = { x: 0, y: 0, z: 0 };
                     group.add(seg);
                 }
             }
@@ -591,6 +620,9 @@ export async function computeBoneOffsets(gender) {
     const key      = isCustom ? null : (gender === 'F' ? 'female' : 'male');
     const boneMap  = isCustom ? (_customGLB?.meshMap ?? {}) : MESH_MAP[key];
     const nodeMap  = await loadGLB(gender);
+    // Segmented hand (hand.glb) supplies the phalange pivots. Left hand only for now;
+    // hand.glb shares female.glb's coordinate space so toScenePos maps it correctly.
+    const handNodeMap = (key === 'female') ? await loadHandGLB() : null;
     const { charScale, groundOffsetGLB, centerX, centerZ } = await getCharacterScaleInfo(gender);
     const offsets = new Map();
 
@@ -620,6 +652,17 @@ export async function computeBoneOffsets(gender) {
 
     for (const boneName of BONE_NAMES) {
         if (boneName === 'torso') continue;
+        // Phalange bones (left hand) take their pivot from hand.glb (origin at the joint).
+        const handNodeName = handNodeMap ? HAND_NODE_MAP[boneName] : null;
+        if (handNodeName) {
+            const hn = handNodeMap.get(handNodeName);
+            if (hn) {
+                const v = new THREE.Vector3();
+                hn.getWorldPosition(v);
+                offsets.set(boneName, toScenePos(v));
+                continue;
+            }
+        }
         const pos = getWorldPos(boneMap[boneName]);
         if (pos) {
             offsets.set(boneName, toScenePos(pos));
