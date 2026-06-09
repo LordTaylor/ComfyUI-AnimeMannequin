@@ -27,6 +27,6 @@ describe('HandsPanel', () => {
         btn.click();
         expect(editor.applyFingerPreset).toHaveBeenCalledTimes(1);
         const arg = editor.applyFingerPreset.mock.calls[0][0];
-        expect(arg).toHaveProperty('index_L');
+        expect(arg).toHaveProperty('index_L_1');
     });
 });

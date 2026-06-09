@@ -1,51 +1,54 @@
 import * as THREE from '../lib/three.module.js';
 
-export const FINGER_BONES = [
-    'thumb_L','index_L','middle_L','ring_L','pinky_L',
-    'thumb_R','index_R','middle_R','ring_R','pinky_R',
+// Phalange bones: _1 = proximal (MCP/knuckle), _2 = middle (PIP), _3 = distal (DIP).
+// Thumb has two segments (_1, _2).
+const FINGERS = [
+    ['thumb', 2], ['index', 3], ['middle', 3], ['ring', 3], ['pinky', 3],
 ];
 
-const FINGERS = ['thumb','index','middle','ring','pinky'];
+export const FINGER_BONES = FINGERS.flatMap(([f, segs]) =>
+    ['L', 'R'].flatMap(side =>
+        Array.from({ length: segs }, (_, i) => `${f}_${side}_${i + 1}`)));
 
-// Local-space curl axis for the four fingers. Confirmed/flipped during visual
-// verification (Plan 1a Task 5). Fingers curl toward the palm around this axis.
+// Local-space curl axis. Fingers curl toward the palm around X; the thumb opposes
+// across the palm around Z. Right hand mirrors the sign so both close inward.
 const CURL_AXIS  = new THREE.Vector3(1, 0, 0);
-// Thumb opposes across the palm — blend of curl + inward yaw.
 const THUMB_AXIS = new THREE.Vector3(0, 0, 1);
 
-// Curl magnitude in degrees per finger, per preset. 0 = straight.
-// Order: [thumb, index, middle, ring, pinky]
+// Per-joint curl (degrees) per finger, per preset: fingers [MCP, PIP, DIP], thumb [MCP, IP].
 const PRESET_CURLS = {
-    'Pięść':        [70,  95,  95,  95,  95],
-    'Otwarta dłoń': [ 0,   0,   0,   0,   0],
-    'Wskazywanie':  [60,   0,  95,  95,  95],
-    'Peace':        [60,   0,   0,  95,  95],
-    'OK':           [45,  45,   0,   0,   0],
-    'Półzgięte':    [15,  25,  25,  25,  25],
+    'Pięść':        { thumb: [40, 50], index: [80, 95, 70], middle: [80, 95, 70], ring: [80, 95, 70], pinky: [80, 95, 70] },
+    'Otwarta dłoń': { thumb: [0, 0],   index: [0, 0, 0],    middle: [0, 0, 0],    ring: [0, 0, 0],    pinky: [0, 0, 0] },
+    'Wskazywanie':  { thumb: [40, 50], index: [0, 0, 0],    middle: [80, 95, 70], ring: [80, 95, 70], pinky: [80, 95, 70] },
+    'Peace':        { thumb: [40, 50], index: [0, 0, 0],    middle: [0, 0, 0],    ring: [80, 95, 70], pinky: [80, 95, 70] },
+    'OK':           { thumb: [25, 35], index: [40, 55, 30], middle: [0, 0, 0],    ring: [0, 0, 0],    pinky: [0, 0, 0] },
+    'Półzgięte':    { thumb: [10, 15], index: [20, 25, 15], middle: [20, 25, 15], ring: [20, 25, 15], pinky: [20, 25, 15] },
 };
 
 export const FINGER_PRESETS = PRESET_CURLS;
 
 const DEG = Math.PI / 180;
 
-/** Quaternion for one finger at a given curl (deg), for side 'L' or 'R'. */
-function fingerQuat(finger, deg, side) {
+/** Quaternion for one phalange at a given curl (deg), side 'L'|'R'. */
+function jointQuat(finger, deg, side) {
     if (!deg) return [0, 0, 0, 1];
-    const axis = (finger === 'thumb' ? THUMB_AXIS : CURL_AXIS).clone();
-    // Mirror the curl direction for the right hand so both hands close inward.
+    const axis = finger === 'thumb' ? THUMB_AXIS : CURL_AXIS;
     const sign = side === 'R' ? -1 : 1;
     const q = new THREE.Quaternion().setFromAxisAngle(axis, sign * deg * DEG);
     return [q.x, q.y, q.z, q.w];
 }
 
-/** Build a { boneName: [x,y,z,w] } pose for all 10 finger bones from a preset name. */
+/** Build a { boneName: [x,y,z,w] } pose for all 28 phalange bones from a preset name. */
 export function buildPresetPose(name) {
     const curls = PRESET_CURLS[name];
     if (!curls) throw new Error(`Unknown finger preset: ${name}`);
     const pose = {};
-    FINGERS.forEach((finger, i) => {
-        pose[`${finger}_L`] = fingerQuat(finger, curls[i], 'L');
-        pose[`${finger}_R`] = fingerQuat(finger, curls[i], 'R');
-    });
+    for (const [finger, segs] of FINGERS) {
+        for (const side of ['L', 'R']) {
+            for (let i = 0; i < segs; i++) {
+                pose[`${finger}_${side}_${i + 1}`] = jointQuat(finger, curls[finger][i] ?? 0, side);
+            }
+        }
+    }
     return pose;
 }
