@@ -47,7 +47,7 @@ vi.mock('../../static/lib/GLTFLoader.js', () => ({
 
 // ── Import testable exports ───────────────────────────────────────────────────
 
-import { WORLD_HEIGHT, MESH_MAP, makeToonMat } from '../../static/src/geometry-adapter-gltf.js';
+import { WORLD_HEIGHT, MESH_MAP, makeToonMat, jointRadiiFor } from '../../static/src/geometry-adapter-gltf.js';
 import { BONE_NAMES } from '../../static/src/mannequin-model.js';
 
 // ── Bug 1: Bone positions not centered ───────────────────────────────────────
@@ -258,6 +258,38 @@ describe('Bug 6 — GLTFLoader sanitizes .name, stripping dots from .L/.R suffix
 // Bug 3 (A-pose arm rotations discarded) requires a real GLB to be loaded to test.
 // It is verified by integration: with correct fix, arms appear in A-pose (~50° angle).
 // Code path: seg.quaternion.copy(glbNode.quaternion) in buildSegments().
+
+// ── jointRadiiFor — finger/hand joint scaling ─────────────────────────────────
+// Body bones keep the fixed 0.055/0.12 defaults.
+// Finger + hand bones scale down to PROPORTIONS.radius so joint balls
+// don't swallow thin geometry and adjacent hit spheres don't overlap.
+
+describe('jointRadiiFor', () => {
+    it('returns the default 0.055/0.12 for ordinary body bones', () => {
+        const r = jointRadiiFor('F', 'forearm_L');
+        expect(r.jointR).toBeCloseTo(0.055, 5);
+        expect(r.hitR).toBeCloseTo(0.12, 5);
+    });
+
+    it('returns much smaller radii for finger bones', () => {
+        const f = jointRadiiFor('F', 'index_L');
+        expect(f.jointR).toBeLessThan(0.03);
+        expect(f.hitR).toBeLessThan(0.06);
+        // smaller than a body joint
+        expect(f.jointR).toBeLessThan(jointRadiiFor('F', 'forearm_L').jointR);
+    });
+
+    it('reduces the hand bones too', () => {
+        const h = jointRadiiFor('F', 'hand_L');
+        expect(h.jointR).toBeLessThan(0.055);
+    });
+
+    it('falls back gracefully for unknown gender / missing radius', () => {
+        const r = jointRadiiFor('custom', 'index_L');
+        expect(r.jointR).toBeGreaterThan(0);
+        expect(r.hitR).toBeGreaterThan(r.jointR);
+    });
+});
 
 // ── MESH_MAP finger nodes ─────────────────────────────────────────────────────
 // Each finger bone must map to its own GLB node (promoted from EXTRA_NODES).

@@ -1,6 +1,6 @@
 import * as THREE from '../lib/three.module.js';
 import { GLTFLoader } from '../lib/GLTFLoader.js';
-import { BONE_NAMES } from './mannequin-model.js';
+import { BONE_NAMES, PROPORTIONS } from './mannequin-model.js';
 
 export const WORLD_HEIGHT = 2.0;
 
@@ -10,6 +10,32 @@ const SELECT_COLOR  = 0x4fc3f7;
 
 const JOINT_RADIUS = 0.055; // visible sphere
 const HIT_RADIUS   = 0.12;  // invisible larger sphere for easier click detection
+
+// Bones whose joints must be scaled down to the bone thickness (thin parts:
+// fingers + hands). Everything else keeps the default body joint size.
+const SMALL_JOINT_BONES = new Set([
+    'thumb_L','index_L','middle_L','ring_L','pinky_L',
+    'thumb_R','index_R','middle_R','ring_R','pinky_R',
+    'hand_L','hand_R',
+]);
+
+/**
+ * Visible + hit sphere radii for a bone's joint.
+ * Body bones use the fixed defaults; fingers/hands scale to PROPORTIONS.radius
+ * so the joint balls don't swallow the thin geometry and adjacent finger hit
+ * spheres don't overlap.
+ */
+export function jointRadiiFor(gender, boneName) {
+    if (!SMALL_JOINT_BONES.has(boneName)) {
+        return { jointR: JOINT_RADIUS, hitR: HIT_RADIUS };
+    }
+    const set = (gender === 'M') ? PROPORTIONS.M : PROPORTIONS.F;
+    const r = set?.[boneName]?.radius ?? 0.011;
+    return {
+        jointR: Math.max(0.012, r * 1.6),
+        hitR:   Math.max(0.025, r * 3.2),
+    };
+}
 
 // OpenPose COCO-18 joint colors — Openpose-18-keypoints_coco_color_codes_v13 (100 % brightness).
 // Bones without a direct COCO keypoint use neutral greys.
@@ -401,10 +427,12 @@ export async function buildSegments(gender) {
         const group = new THREE.Group();
         group.name = boneName;
 
+        const { jointR, hitR } = jointRadiiFor(gender, boneName);
+
         // Visible joint dot — MeshBasicMaterial + depthTest:false so it renders
         // on top of body geometry and is always clickable.
         const sphere = new THREE.Mesh(
-            new THREE.SphereGeometry(JOINT_RADIUS, 12, 8),
+            new THREE.SphereGeometry(jointR, 12, 8),
             new THREE.MeshBasicMaterial({ color: JOINT_COLOR, depthTest: false })
         );
         sphere.renderOrder = 2;
@@ -416,7 +444,7 @@ export async function buildSegments(gender) {
         // Invisible hit sphere — larger radius for easier click detection.
         // material.visible=false prevents rendering but object remains raycasted.
         const hitSphere = new THREE.Mesh(
-            new THREE.SphereGeometry(HIT_RADIUS, 6, 4),
+            new THREE.SphereGeometry(hitR, 6, 4),
             new THREE.MeshBasicMaterial({ visible: false })
         );
         hitSphere.userData.boneName    = boneName;
