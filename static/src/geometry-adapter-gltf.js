@@ -528,10 +528,15 @@ export async function buildSegments(gender) {
             }
         }
 
-        // Phalange segment from hand.glb (left hand). The bone pivot sits at the joint
-        // (hand.glb origins are at the proximal joint), so geometry attaches at offset 0
-        // and rotating the bone curls the segment about the joint — same convention as body.
-        const handNodeName = handNodeMap ? HAND_NODE_MAP[boneName] : null;
+        // Phalange segment from hand.glb. The bone pivot sits at the joint (hand.glb origins
+        // are at the proximal joint), so geometry attaches at offset 0 and rotating the bone
+        // curls the segment about the joint — same convention as body. Right hand mirrors the
+        // left node across the sagittal plane (decompose handles the negative-scale reflection;
+        // DoubleSide material keeps the flipped winding visible).
+        const isRightPhalange = handNodeMap && boneName.includes('_R_');
+        const handNodeName = handNodeMap
+            ? (HAND_NODE_MAP[boneName] ?? (isRightPhalange ? HAND_NODE_MAP[boneName.replace('_R_', '_L_')] : null))
+            : null;
         if (handNodeName) {
             const hNode = handNodeMap.get(handNodeName);
             if (hNode) {
@@ -541,13 +546,27 @@ export async function buildSegments(gender) {
                     const seg = new THREE.Mesh(meshNode.geometry.clone(), makeToonMat(SEGMENT_COLOR));
                     seg.userData.boneName        = boneName;
                     seg.userData.proportionGroup = SEGMENT_PROPORTION_GROUP[boneName] ?? null;
-                    seg.position.set(0, 0, 0);
                     const wQ = new THREE.Quaternion();
                     hNode.getWorldQuaternion(wQ);
-                    seg.quaternion.copy(wQ);
                     const wS = new THREE.Vector3();
                     hNode.getWorldScale(wS);
-                    seg.scale.set(wS.x * charScale, wS.y * charScale, wS.z * charScale);
+                    seg.position.set(0, 0, 0);
+                    if (isRightPhalange) {
+                        // Reflect the rest transform across scene x=0: F * (R · S), then decompose.
+                        const m = new THREE.Matrix4().compose(
+                            new THREE.Vector3(),
+                            wQ,
+                            new THREE.Vector3(wS.x * charScale, wS.y * charScale, wS.z * charScale),
+                        );
+                        m.premultiply(new THREE.Matrix4().makeScale(-1, 1, 1));
+                        const mp = new THREE.Vector3(), mq = new THREE.Quaternion(), ms = new THREE.Vector3();
+                        m.decompose(mp, mq, ms);
+                        seg.quaternion.copy(mq);
+                        seg.scale.copy(ms);
+                    } else {
+                        seg.quaternion.copy(wQ);
+                        seg.scale.set(wS.x * charScale, wS.y * charScale, wS.z * charScale);
+                    }
                     seg.userData._baseScale    = { x: seg.scale.x, y: seg.scale.y, z: seg.scale.z };
                     seg.userData._basePosition = { x: 0, y: 0, z: 0 };
                     group.add(seg);
@@ -664,6 +683,18 @@ export async function computeBoneOffsets(gender) {
                 const v = new THREE.Vector3();
                 hn.getWorldPosition(v);
                 offsets.set(boneName, toScenePos(v));
+                continue;
+            }
+        }
+        // Right phalanges: mirror the corresponding LEFT node across the sagittal plane (scene x=0).
+        if (handNodeMap && boneName.includes('_R_')) {
+            const leftNode = handNodeMap.get(HAND_NODE_MAP[boneName.replace('_R_', '_L_')]);
+            if (leftNode) {
+                const v = new THREE.Vector3();
+                leftNode.getWorldPosition(v);
+                const p = toScenePos(v);
+                p.x = -p.x;
+                offsets.set(boneName, p);
                 continue;
             }
         }
