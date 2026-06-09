@@ -62,6 +62,7 @@ describe('_computeHandKeypoints', () => {
     });
 
     it('places finger base/tip at the documented indices and interpolates middles', () => {
+        // No fingerTipLocal set → exercises fallback path (legacy base-wrist heuristic)
         const r = Object.create(MannequinRenderer.prototype);
         r._camera = makeCamera();
         r._outputWidth = 100;
@@ -76,5 +77,59 @@ describe('_computeHandKeypoints', () => {
         // j1 ~ 1/3 between base and tip; j2 ~ 2/3
         expect(j1.x).toBeCloseTo(base.x + (tip.x - base.x) / 3, 3);
         expect(j2.x).toBeCloseTo(base.x + (tip.x - base.x) * 2 / 3, 3);
+    });
+});
+
+// Helper to create a minimal renderer with real THREE scene graph support
+function realRenderer(camera, W, H) {
+    const r = Object.create(MannequinRenderer.prototype);
+    r._camera = camera;
+    r._outputWidth = W;
+    r._outputHeight = H;
+    r._bones = new Map();
+    return r;
+}
+
+describe('keypoints follow finger rotation', () => {
+    it('tip moves when the finger bone rotates; base (knuckle) stays', () => {
+        const cam = makeCamera();
+        const scene = new THREE.Scene();
+        const hand = new THREE.Object3D(); hand.position.set(0.2, 1, 0); scene.add(hand);
+        const index = new THREE.Object3D(); index.position.set(0, 0, 0); hand.add(index); // knuckle at hand
+        index.userData.fingerTipLocal = new THREE.Vector3(0, -0.1, 0); // points down 10cm at rest
+        scene.updateMatrixWorld(true);
+
+        const r = realRenderer(cam, 100, 100);
+        r._bones.set('hand_L', hand);
+        r._bones.set('index_L', index);
+
+        const before = r._computeHandKeypoints('L');
+        const baseBefore = before[5], tipBefore = before[8];
+
+        // rotate the finger 90° about Z and recompute
+        index.quaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+        scene.updateMatrixWorld(true);
+        const after = r._computeHandKeypoints('L');
+        const baseAfter = after[5], tipAfter = after[8];
+
+        // base (knuckle) is the pivot — unchanged
+        expect(baseAfter.x).toBeCloseTo(baseBefore.x, 3);
+        expect(baseAfter.y).toBeCloseTo(baseBefore.y, 3);
+        // tip swings — must differ meaningfully
+        const moved = Math.hypot(tipAfter.x - tipBefore.x, tipAfter.y - tipBefore.y);
+        expect(moved).toBeGreaterThan(1); // more than 1px on a 100px canvas
+    });
+
+    it('falls back to base-wrist heuristic and still returns 21 points when fingerTipLocal is absent', () => {
+        const cam = makeCamera();
+        const r = realRenderer(cam, 100, 100);
+        const hand = new THREE.Object3D(); hand.position.set(0, 1, 0);
+        const idx = new THREE.Object3D(); idx.position.set(0.2, 1, 0);
+        const scene = new THREE.Scene(); scene.add(hand); scene.add(idx); scene.updateMatrixWorld(true);
+        r._bones.set('hand_L', hand);
+        r._bones.set('index_L', idx);
+        const kps = r._computeHandKeypoints('L');
+        expect(kps).toHaveLength(21);
+        expect(kps[5]).toBeTruthy(); // index base present
     });
 });

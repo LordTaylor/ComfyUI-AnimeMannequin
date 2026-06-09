@@ -743,16 +743,28 @@ export class MannequinRenderer {
             if (!fb) continue;
             const base = new THREE.Vector3();
             fb.getWorldPosition(base);
-            const dir = base.clone().sub(wristWorld);
-            const len = dir.length() || 0.04;
-            dir.normalize();
-            const tip = base.clone().add(dir.multiplyScalar(len));
             const pBase = project(base);
-            const pTip  = project(tip);
-            kps[start]     = pBase;
-            kps[start + 1] = { x: pBase.x + (pTip.x - pBase.x) / 3,     y: pBase.y + (pTip.y - pBase.y) / 3 };
-            kps[start + 2] = { x: pBase.x + (pTip.x - pBase.x) * 2 / 3, y: pBase.y + (pTip.y - pBase.y) * 2 / 3 };
-            kps[start + 3] = pTip;
+            kps[start] = pBase;
+
+            const tipLocal = fb.userData && fb.userData.fingerTipLocal;
+            if (tipLocal) {
+                // Follow the bone's full world transform → tip + sub-joints swing with rotation.
+                // clone() each time so localToWorld doesn't corrupt the stored vector.
+                const pAt = (frac) => project(fb.localToWorld(tipLocal.clone().multiplyScalar(frac)));
+                kps[start + 1] = pAt(1 / 3);
+                kps[start + 2] = pAt(2 / 3);
+                kps[start + 3] = pAt(1);
+            } else {
+                // Fallback: legacy base−wrist heuristic (unchanged behaviour)
+                const dir = base.clone().sub(wristWorld);
+                const len = dir.length() || 0.04;
+                dir.normalize();
+                const tip = base.clone().add(dir.multiplyScalar(len));
+                const pTip = project(tip);
+                kps[start + 1] = { x: pBase.x + (pTip.x - pBase.x) / 3,     y: pBase.y + (pTip.y - pBase.y) / 3 };
+                kps[start + 2] = { x: pBase.x + (pTip.x - pBase.x) * 2 / 3, y: pBase.y + (pTip.y - pBase.y) * 2 / 3 };
+                kps[start + 3] = pTip;
+            }
         }
         return kps;
     }
