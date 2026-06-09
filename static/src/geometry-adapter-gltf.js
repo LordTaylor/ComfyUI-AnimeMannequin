@@ -11,6 +11,9 @@ const SELECT_COLOR  = 0x4fc3f7;
 const JOINT_RADIUS = 0.044; // visible sphere (−20% tuning pass)
 const HIT_RADIUS   = 0.12;  // invisible larger sphere for easier click detection
 
+// Male hands reuse the female hand.glb, enlarged for male proportions.
+const MALE_HAND_SCALE = 1.2;
+
 // Bones whose joints must be scaled down to the bone thickness (thin parts:
 // fingers + hands). Everything else keeps the default body joint size.
 const SMALL_JOINT_BONES = new Set([
@@ -463,7 +466,8 @@ export async function buildSegments(gender) {
     // Segmented hand (hand.glb) supplies finger phalange geometry for BOTH genders.
     // Phalange meshes always use the FEMALE hand scale (identical hands on both bodies).
     const handNodeMap = (key === 'female' || key === 'male') ? await loadHandGLB() : null;
-    const handScale   = handNodeMap ? (await getCharacterScaleInfo('F')).charScale : 1;
+    const handScale   = (handNodeMap ? (await getCharacterScaleInfo('F')).charScale : 1)
+        * (key === 'male' ? MALE_HAND_SCALE : 1);
     const { charScale } = await getCharacterScaleInfo(gender);
     const groups = new Map();
 
@@ -657,7 +661,8 @@ export async function computeBoneOffsets(gender) {
     // toScenePos; male anchors the same hand at its own wrist (wrist-relative offsets,
     // female hand scale — both genders get identical hands).
     const handNodeMap = (key === 'female' || key === 'male') ? await loadHandGLB() : null;
-    const handScale   = handNodeMap ? (await getCharacterScaleInfo('F')).charScale : 1;
+    const handScale   = (handNodeMap ? (await getCharacterScaleInfo('F')).charScale : 1)
+        * (key === 'male' ? MALE_HAND_SCALE : 1);
     const { charScale, groundOffsetGLB, centerX, centerZ } = await getCharacterScaleInfo(gender);
     const offsets = new Map();
 
