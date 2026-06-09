@@ -750,8 +750,10 @@ export class MannequinRenderer {
 
     /**
      * 21 OpenPose hand keypoints in screen space for one side ('L'|'R').
-     * kp[0]=wrist; each finger: base(MCP), 1/3, 2/3, tip. PIP/DIP interpolated,
-     * tip extrapolated from base along the finger direction (finger - wrist).
+     * kp[0]=wrist; fingers map real phalange joints: MCP(_1), PIP(_2), DIP(_3), tip.
+     * Thumb (2 segments): _1, _2, midpoint(_2,tip), tip.
+     * Tip = distal bone's fingerTipLocal via localToWorld; fallback extrapolates
+     * beyond the distal joint along the last segment direction.
      */
     _computeHandKeypoints(side) {
         const W = this._outputWidth, H = this._outputHeight;
@@ -759,83 +761,100 @@ export class MannequinRenderer {
             const p = v3.clone().project(this._camera);
             return { x: (p.x * 0.5 + 0.5) * W, y: (-p.y * 0.5 + 0.5) * H };
         };
+        const worldPos = (bone) => {
+            const v = new THREE.Vector3();
+            bone.getWorldPosition(v);
+            return v;
+        };
         const kps = new Array(21).fill(null);
-        const wristBone = this._bones.get(`hand_${side}`);
-        const wristWorld = new THREE.Vector3();
-        if (wristBone) {
-            wristBone.getWorldPosition(wristWorld);
-            kps[0] = project(wristWorld);
-        }
-        for (const { bone, start } of MannequinRenderer._HAND_FINGERS) {
-            const fb = this._bones.get(`${bone}_${side}`);
-            if (!fb) continue;
-            const base = new THREE.Vector3();
-            fb.getWorldPosition(base);
-            const pBase = project(base);
-            kps[start] = pBase;
+        const wrist = this._bones.get(`hand_${side}`);
+        if (wrist) kps[0] = project(worldPos(wrist));
 
-            const tipLocal = fb.userData && fb.userData.fingerTipLocal;
+        for (const { bone: finger, start } of MannequinRenderer._HAND_FINGERS) {
+            const segs = finger === 'thumb' ? 2 : 3;
+            const chain = [];
+            for (let i = 1; i <= segs; i++) {
+                const b = this._bones.get(`${finger}_${side}_${i}`);
+                if (!b) break;
+                chain.push(b);
+            }
+            if (!chain.length) continue;
+
+            const joints = chain.map(worldPos);  // MCP, (PIP), (DIP)
+            const distal = chain[chain.length - 1];
+
+            // Tip: stored rest-space offset, else extrapolate past the distal joint.
+            let tipWorld;
+            const tipLocal = distal.userData && distal.userData.fingerTipLocal;
             if (tipLocal) {
-                // Follow the bone's full world transform → tip + sub-joints swing with rotation.
-                // clone() each time so localToWorld doesn't corrupt the stored vector.
-                const pAt = (frac) => project(fb.localToWorld(tipLocal.clone().multiplyScalar(frac)));
-                kps[start + 1] = pAt(1 / 3);
-                kps[start + 2] = pAt(2 / 3);
-                kps[start + 3] = pAt(1);
+                tipWorld = distal.localToWorld(tipLocal.clone());
             } else {
-                // Fallback: legacy base−wrist heuristic (unchanged behaviour)
-                const dir = base.clone().sub(wristWorld);
-                const len = dir.length() || 0.04;
-                dir.normalize();
-                const tip = base.clone().add(dir.multiplyScalar(len));
-                const pTip = project(tip);
-                kps[start + 1] = { x: pBase.x + (pTip.x - pBase.x) / 3,     y: pBase.y + (pTip.y - pBase.y) / 3 };
-                kps[start + 2] = { x: pBase.x + (pTip.x - pBase.x) * 2 / 3, y: pBase.y + (pTip.y - pBase.y) * 2 / 3 };
+                const prev = joints.length > 1 ? joints[joints.length - 2]
+                    : (wrist ? worldPos(wrist) : joints[0]);
+                const dir = joints[joints.length - 1].clone().sub(prev);
+                const len = dir.length() || 0.03;
+                tipWorld = joints[joints.length - 1].clone().add(dir.normalize().multiplyScalar(len));
+            }
+            const pTip = project(tipWorld);
+
+            if (finger === 'thumb') {
+                kps[start]     = joints[0] ? project(joints[0]) : null;
+                kps[start + 1] = joints[1] ? project(joints[1]) : null;
+                if (kps[start + 1]) {
+                    kps[start + 2] = { x: (kps[start + 1].x + pTip.x) / 2, y: (kps[start + 1].y + pTip.y) / 2 };
+                }
+                kps[start + 3] = pTip;
+            } else {
+                for (let i = 0; i < 3; i++) kps[start + i] = joints[i] ? project(joints[i]) : null;
                 kps[start + 3] = pTip;
             }
         }
         return kps;
     }
 
+    // Distal phalange of each finger — the only segment whose tip matters.
+    static _DISTAL_BONES = [
+        'index_L_3', 'middle_L_3', 'ring_L_3', 'pinky_L_3', 'thumb_L_2',
+        'index_R_3', 'middle_R_3', 'ring_R_3', 'pinky_R_3', 'thumb_R_2',
+    ];
+
     /**
-     * Populate fingerBone.userData.fingerTipLocal — a bone-local Vector3 from the
-     * knuckle (bone origin) to the fingertip — derived from the finger segment
-     * geometry. Rotation-invariant (mesh is rigidly attached to the bone), so the
-     * stored offset is a true rest-space value. Consumed by _computeHandKeypoints.
+     * Populate distal fingerBone.userData.fingerTipLocal — a bone-local Vector3 from
+     * the distal joint to the fingertip — derived from the distal segment geometry.
+     * Rotation-invariant (mesh is rigidly attached to the bone), so the stored offset
+     * is a true rest-space value. Consumed by _computeHandKeypoints.
      */
     _computeFingerTipLocals() {
         this._mannequinRoot?.updateMatrixWorld(true);
         const corner = new THREE.Vector3();
-        for (const { bone } of MannequinRenderer._HAND_FINGERS) {
-            for (const side of ['L', 'R']) {
-                const fb = this._bones.get(`${bone}_${side}`);
-                if (!fb) continue;
-                // find the segment mesh for this finger
-                let mesh = null;
-                fb.traverse(o => {
-                    if (!mesh && o.isMesh && o.userData.boneName === `${bone}_${side}` &&
-                        !o.userData.isJoint && !o.userData.isHitTarget && o.geometry) {
-                        mesh = o;
-                    }
-                });
-                if (!mesh) continue;
-                mesh.geometry.computeBoundingBox();
-                const bb = mesh.geometry.boundingBox;
-                if (!bb) continue;
-                let best = null, bestDist = -1;
-                for (let xi = 0; xi < 2; xi++)
-                for (let yi = 0; yi < 2; yi++)
-                for (let zi = 0; zi < 2; zi++) {
-                    corner.set(xi ? bb.max.x : bb.min.x,
-                               yi ? bb.max.y : bb.min.y,
-                               zi ? bb.max.z : bb.min.z);
-                    // geometry-local → world → finger-bone-local (rotation-invariant)
-                    const local = fb.worldToLocal(mesh.localToWorld(corner.clone()));
-                    const d = local.length();
-                    if (d > bestDist) { bestDist = d; best = local; }
+        for (const boneName of MannequinRenderer._DISTAL_BONES) {
+            const fb = this._bones.get(boneName);
+            if (!fb) continue;
+            // find the segment mesh for this distal bone
+            let mesh = null;
+            fb.traverse(o => {
+                if (!mesh && o.isMesh && o.userData.boneName === boneName &&
+                    !o.userData.isJoint && !o.userData.isHitTarget && o.geometry) {
+                    mesh = o;
                 }
-                if (best) fb.userData.fingerTipLocal = best;
+            });
+            if (!mesh) continue;
+            mesh.geometry.computeBoundingBox();
+            const bb = mesh.geometry.boundingBox;
+            if (!bb) continue;
+            let best = null, bestDist = -1;
+            for (let xi = 0; xi < 2; xi++)
+            for (let yi = 0; yi < 2; yi++)
+            for (let zi = 0; zi < 2; zi++) {
+                corner.set(xi ? bb.max.x : bb.min.x,
+                           yi ? bb.max.y : bb.min.y,
+                           zi ? bb.max.z : bb.min.z);
+                // geometry-local → world → finger-bone-local (rotation-invariant)
+                const local = fb.worldToLocal(mesh.localToWorld(corner.clone()));
+                const d = local.length();
+                if (d > bestDist) { bestDist = d; best = local; }
             }
+            if (best) fb.userData.fingerTipLocal = best;
         }
     }
 
