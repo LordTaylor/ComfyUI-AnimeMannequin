@@ -496,8 +496,13 @@ export async function buildSegments(gender) {
         hitSphere.userData.isHitTarget = true;
         group.add(hitSphere);
 
+        // Male hand bones take the segmented hand.glb palm instead of male.glb's own
+        // hand mesh ("same hands on both genders") — skip the body-GLB segment for them.
+        const isMaleHandBone = key === 'male' && handNodeMap &&
+            (boneName === 'hand_L' || boneName === 'hand_R');
+
         // GLB mesh segment
-        const glbNodeName = boneMap[boneName];
+        const glbNodeName = isMaleHandBone ? null : boneMap[boneName];
         if (glbNodeName) {
             const glbNode = nodeMap.get(glbNodeName);
             if (glbNode) {
@@ -535,9 +540,11 @@ export async function buildSegments(gender) {
         // curls the segment about the joint — same convention as body. Right hand mirrors the
         // left node across the sagittal plane (decompose handles the negative-scale reflection;
         // DoubleSide material keeps the flipped winding visible).
-        const isRightPhalange = handNodeMap && boneName.includes('_R_');
+        const isRightPhalange = handNodeMap && (boneName.includes('_R_') || boneName === 'hand_R');
         const handNodeName = handNodeMap
-            ? (HAND_NODE_MAP[boneName] ?? (isRightPhalange ? HAND_NODE_MAP[boneName.replace('_R_', '_L_')] : null))
+            ? (HAND_NODE_MAP[boneName]
+                ?? (boneName.includes('_R_') ? HAND_NODE_MAP[boneName.replace('_R_', '_L_')] : null)
+                ?? (isMaleHandBone ? HAND_PALM_NODE : null))
             : null;
         if (handNodeName) {
             const hNode = handNodeMap.get(handNodeName);
