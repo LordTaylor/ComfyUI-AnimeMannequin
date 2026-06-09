@@ -21,7 +21,7 @@ export function defaultState(gender = 'F') {
         pose:          {},           // { [boneName]: { x, y, z, w } }
         proportions:   defaultProportions(),
         bustCfg:       { ...BUST_DEFAULTS },
-        jointColorMode: 'openpose',  // 'openpose' | 'flat'
+        jointColorMode: 'openpose',  // 'openpose' | 'flat' | 'all'
         groundEnabled:  false,
         outputWidth:    768,
         outputHeight:   1024,

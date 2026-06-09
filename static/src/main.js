@@ -196,12 +196,15 @@ btnOverlays?.addEventListener('click', () => {
 });
 
 const btnColors = document.getElementById('btn-colors');
+// Cycle: OpenPose (colored bones) → Flat (grey joint balls) → All (bones + balls)
+const JOINT_MODE_CYCLE = ['openpose', 'flat', 'all'];
+const JOINT_MODE_LABEL = { openpose: 'OpenPose', flat: 'Flat', all: 'All' };
 btnColors?.addEventListener('click', () => {
     const current = store.getState().jointColorMode;
-    const next    = current === 'openpose' ? 'flat' : 'openpose';
+    const next    = JOINT_MODE_CYCLE[(JOINT_MODE_CYCLE.indexOf(current) + 1) % JOINT_MODE_CYCLE.length];
     store.setState({ jointColorMode: next });
-    btnColors.textContent = next === 'openpose' ? 'OpenPose' : 'Flat';
-    btnColors.classList.toggle('active', next === 'openpose');
+    btnColors.textContent = JOINT_MODE_LABEL[next];
+    btnColors.classList.toggle('active', next !== 'flat');
 });
 
 // ── Mini overflow menu (⋯) ──────────────────────────────────────────────────────

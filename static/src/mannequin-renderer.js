@@ -171,7 +171,7 @@ export class MannequinRenderer {
         this._groundEnabled = false;
 
         this._dirty = true;
-        this._jointColorMode = 'openpose'; // 'openpose' | 'flat'
+        this._jointColorMode = 'openpose'; // 'openpose' | 'flat' | 'all'
         this._proportions = defaultProportions();
         this._bustCfg = { ...BUST_DEFAULTS };
         this._skeletonLines    = null;
@@ -250,10 +250,11 @@ export class MannequinRenderer {
         this._dirty = true;
     }
 
-    /** Internal — sets joint color mode WITHOUT going through store (avoids infinite loop). */
+    /** Internal — sets joint color mode WITHOUT going through store (avoids infinite loop).
+     *  'openpose' = colored bones only; 'flat' = grey joint balls only; 'all' = both. */
     _applyJointColorModeInternal(mode) {
         this._applyJointColors(mode);
-        if (this._skeletonLines) this._skeletonLines.visible = (mode === 'openpose');
+        if (this._skeletonLines) this._skeletonLines.visible = (mode === 'openpose' || mode === 'all');
         this._scene.traverse(o => {
             if (o.userData.isJoint && !o.userData.isHitTarget) o.visible = (mode !== 'openpose');
         });
@@ -433,7 +434,8 @@ export class MannequinRenderer {
     _applyJointColors(mode) {
         this._scene.traverse(obj => {
             if (obj.userData.isJoint && !obj.userData.isHitTarget) {
-                const color = mode === 'openpose'
+                // 'openpose' and 'all' use rainbow joint colors; 'flat' uses neutral grey.
+                const color = mode !== 'flat'
                     ? (OPENPOSE_COLORS[obj.userData.boneName] ?? JOINT_COLOR)
                     : JOINT_COLOR;
                 obj.userData.originalColor = color;
@@ -642,7 +644,7 @@ export class MannequinRenderer {
         gizmos.forEach(o => o.visible = true);
         setJointsVisible(true);
         this._grid.visible = true;
-        if (this._skeletonLines) this._skeletonLines.visible = (this._jointColorMode === 'openpose');
+        if (this._skeletonLines) this._skeletonLines.visible = (this._jointColorMode === 'openpose' || this._jointColorMode === 'all');
         this._dirty = true;
         // pose   = 2D OpenPose skeleton on black bg   → for OpenPose ControlNet
         // openpose = 3D body + skeleton overlay        → visual reference
@@ -867,7 +869,7 @@ export class MannequinRenderer {
 
         const group = new THREE.Group();
         group.renderOrder = 3;
-        group.visible = (this._jointColorMode === 'openpose');
+        group.visible = (this._jointColorMode === 'openpose' || this._jointColorMode === 'all');
 
         // Unit cylinder (height=1 along Y) — scaled in _updateSkeletonLines
         const sharedGeo = new THREE.CylinderGeometry(RADIUS, RADIUS, 1, 8, 1);

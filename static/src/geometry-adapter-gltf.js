@@ -460,8 +460,10 @@ export async function buildSegments(gender) {
     const key      = isCustom ? null : (gender === 'F' ? 'female' : 'male');
     const boneMap  = isCustom ? (_customGLB?.meshMap ?? {}) : MESH_MAP[key];
     const nodeMap  = await loadGLB(gender);
-    // Segmented hand (hand.glb) supplies finger phalange geometry. Left hand only for now.
-    const handNodeMap = (key === 'female') ? await loadHandGLB() : null;
+    // Segmented hand (hand.glb) supplies finger phalange geometry for BOTH genders.
+    // Phalange meshes always use the FEMALE hand scale (identical hands on both bodies).
+    const handNodeMap = (key === 'female' || key === 'male') ? await loadHandGLB() : null;
+    const handScale   = handNodeMap ? (await getCharacterScaleInfo('F')).charScale : 1;
     const { charScale } = await getCharacterScaleInfo(gender);
     const groups = new Map();
 
@@ -556,7 +558,7 @@ export async function buildSegments(gender) {
                         const m = new THREE.Matrix4().compose(
                             new THREE.Vector3(),
                             wQ,
-                            new THREE.Vector3(wS.x * charScale, wS.y * charScale, wS.z * charScale),
+                            new THREE.Vector3(wS.x * handScale, wS.y * handScale, wS.z * handScale),
                         );
                         m.premultiply(new THREE.Matrix4().makeScale(-1, 1, 1));
                         const mp = new THREE.Vector3(), mq = new THREE.Quaternion(), ms = new THREE.Vector3();
@@ -565,7 +567,7 @@ export async function buildSegments(gender) {
                         seg.scale.copy(ms);
                     } else {
                         seg.quaternion.copy(wQ);
-                        seg.scale.set(wS.x * charScale, wS.y * charScale, wS.z * charScale);
+                        seg.scale.set(wS.x * handScale, wS.y * handScale, wS.z * handScale);
                     }
                     seg.userData._baseScale    = { x: seg.scale.x, y: seg.scale.y, z: seg.scale.z };
                     seg.userData._basePosition = { x: 0, y: 0, z: 0 };
@@ -643,9 +645,12 @@ export async function computeBoneOffsets(gender) {
     const key      = isCustom ? null : (gender === 'F' ? 'female' : 'male');
     const boneMap  = isCustom ? (_customGLB?.meshMap ?? {}) : MESH_MAP[key];
     const nodeMap  = await loadGLB(gender);
-    // Segmented hand (hand.glb) supplies the phalange pivots. Left hand only for now;
-    // hand.glb shares female.glb's coordinate space so toScenePos maps it correctly.
-    const handNodeMap = (key === 'female') ? await loadHandGLB() : null;
+    // Segmented hand (hand.glb) supplies the phalange pivots for BOTH genders.
+    // hand.glb shares female.glb's coordinate space: female maps it absolutely via
+    // toScenePos; male anchors the same hand at its own wrist (wrist-relative offsets,
+    // female hand scale — both genders get identical hands).
+    const handNodeMap = (key === 'female' || key === 'male') ? await loadHandGLB() : null;
+    const handScale   = handNodeMap ? (await getCharacterScaleInfo('F')).charScale : 1;
     const { charScale, groundOffsetGLB, centerX, centerZ } = await getCharacterScaleInfo(gender);
     const offsets = new Map();
 
@@ -675,25 +680,33 @@ export async function computeBoneOffsets(gender) {
 
     for (const boneName of BONE_NAMES) {
         if (boneName === 'torso') continue;
-        // Phalange bones (left hand) take their pivot from hand.glb (origin at the joint).
-        const handNodeName = handNodeMap ? HAND_NODE_MAP[boneName] : null;
-        if (handNodeName) {
-            const hn = handNodeMap.get(handNodeName);
+        // Phalange bones take their pivot from hand.glb (origin at the joint).
+        // Left side resolves directly; right side mirrors the left pivot across x=0.
+        if (handNodeMap && /_(L|R)_\d$/.test(boneName)) {
+            const leftName = boneName.includes('_R_') ? boneName.replace('_R_', '_L_') : boneName;
+            const hn = handNodeMap.get(HAND_NODE_MAP[leftName]);
             if (hn) {
                 const v = new THREE.Vector3();
                 hn.getWorldPosition(v);
-                offsets.set(boneName, toScenePos(v));
-                continue;
-            }
-        }
-        // Right phalanges: mirror the corresponding LEFT node across the sagittal plane (scene x=0).
-        if (handNodeMap && boneName.includes('_R_')) {
-            const leftNode = handNodeMap.get(HAND_NODE_MAP[boneName.replace('_R_', '_L_')]);
-            if (leftNode) {
-                const v = new THREE.Vector3();
-                leftNode.getWorldPosition(v);
-                const p = toScenePos(v);
-                p.x = -p.x;
+                let p;
+                if (key === 'female') {
+                    // hand.glb lives in female.glb's coordinate space — map absolutely.
+                    p = toScenePos(v);
+                } else {
+                    // male: anchor at the male wrist; offsets relative to hand.glb's palm
+                    // origin (at the wrist), converted with the FEMALE hand scale so both
+                    // genders get identical hands.
+                    const palm = handNodeMap.get(HAND_PALM_NODE);
+                    const pv = new THREE.Vector3();
+                    if (palm) palm.getWorldPosition(pv);
+                    const wrist = offsets.get('hand_L'); // hand_L precedes phalanges in BONE_NAMES
+                    p = new THREE.Vector3(
+                        wrist.x + (v.x - pv.x) * handScale,
+                        wrist.y + (v.y - pv.y) * handScale,
+                        wrist.z + (v.z - pv.z) * handScale,
+                    );
+                }
+                if (boneName.includes('_R_')) p.x = -p.x;
                 offsets.set(boneName, p);
                 continue;
             }
