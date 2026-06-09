@@ -5,8 +5,8 @@ import {
 } from '../../static/src/mannequin-model.js';
 
 describe('BONE_NAMES', () => {
-    it('contains exactly 30 bones (20 body + 10 fingers)', () => {
-        expect(BONE_NAMES).toHaveLength(30);
+    it('contains exactly 48 bones (20 body + 28 finger phalanges)', () => {
+        expect(BONE_NAMES).toHaveLength(48);
     });
 
     it('contains all required body bones', () => {
@@ -20,12 +20,38 @@ describe('BONE_NAMES', () => {
         for (const b of required) expect(BONE_NAMES).toContain(b);
     });
 
-    it('contains 10 finger bones (5 per hand)', () => {
-        const fingers = [
-            'thumb_L','index_L','middle_L','ring_L','pinky_L',
-            'thumb_R','index_R','middle_R','ring_R','pinky_R',
+    it('contains 28 phalange bones (14 per hand)', () => {
+        const phalanges = [
+            // left hand
+            'index_L_1','index_L_2','index_L_3',
+            'middle_L_1','middle_L_2','middle_L_3',
+            'ring_L_1','ring_L_2','ring_L_3',
+            'pinky_L_1','pinky_L_2','pinky_L_3',
+            'thumb_L_1','thumb_L_2',
+            // right hand
+            'index_R_1','index_R_2','index_R_3',
+            'middle_R_1','middle_R_2','middle_R_3',
+            'ring_R_1','ring_R_2','ring_R_3',
+            'pinky_R_1','pinky_R_2','pinky_R_3',
+            'thumb_R_1','thumb_R_2',
         ];
-        for (const f of fingers) expect(BONE_NAMES).toContain(f);
+        for (const f of phalanges) expect(BONE_NAMES).toContain(f);
+    });
+
+    it('spot-checks representative phalange names are present', () => {
+        expect(BONE_NAMES).toContain('index_L_1');
+        expect(BONE_NAMES).toContain('index_L_2');
+        expect(BONE_NAMES).toContain('index_L_3');
+        expect(BONE_NAMES).toContain('thumb_L_1');
+        expect(BONE_NAMES).toContain('thumb_L_2');
+        expect(BONE_NAMES).toContain('pinky_R_3');
+    });
+
+    it('does NOT contain old single finger bones', () => {
+        for (const old of ['thumb_L','index_L','middle_L','ring_L','pinky_L',
+                           'thumb_R','index_R','middle_R','ring_R','pinky_R']) {
+            expect(BONE_NAMES).not.toContain(old);
+        }
     });
 });
 
@@ -43,26 +69,81 @@ describe('BONE_CHILDREN', () => {
 });
 
 describe('BONE_CHILDREN finger hierarchy', () => {
-    it('hand_L has 5 finger children, hand_R too', () => {
-        for (const f of ['thumb_L','index_L','middle_L','ring_L','pinky_L'])
-            expect(BONE_CHILDREN.hand_L).toContain(f);
-        for (const f of ['thumb_R','index_R','middle_R','ring_R','pinky_R'])
-            expect(BONE_CHILDREN.hand_R).toContain(f);
+    it('hand_L children are exactly the 5 left proximal bones', () => {
+        expect(BONE_CHILDREN.hand_L).toContain('index_L_1');
+        expect(BONE_CHILDREN.hand_L).toContain('middle_L_1');
+        expect(BONE_CHILDREN.hand_L).toContain('ring_L_1');
+        expect(BONE_CHILDREN.hand_L).toContain('pinky_L_1');
+        expect(BONE_CHILDREN.hand_L).toContain('thumb_L_1');
+        expect(BONE_CHILDREN.hand_L).toHaveLength(5);
     });
 
-    it('each finger bone is a leaf', () => {
-        for (const f of ['thumb_L','index_L','middle_L','ring_L','pinky_L',
-                         'thumb_R','index_R','middle_R','ring_R','pinky_R'])
-            expect(BONE_CHILDREN[f]).toEqual([]);
+    it('hand_R children are exactly the 5 right proximal bones', () => {
+        expect(BONE_CHILDREN.hand_R).toContain('index_R_1');
+        expect(BONE_CHILDREN.hand_R).toContain('middle_R_1');
+        expect(BONE_CHILDREN.hand_R).toContain('ring_R_1');
+        expect(BONE_CHILDREN.hand_R).toContain('pinky_R_1');
+        expect(BONE_CHILDREN.hand_R).toContain('thumb_R_1');
+        expect(BONE_CHILDREN.hand_R).toHaveLength(5);
+    });
+
+    it('index_L chain: _1→_2→_3→[]', () => {
+        expect(BONE_CHILDREN.index_L_1).toEqual(['index_L_2']);
+        expect(BONE_CHILDREN.index_L_2).toEqual(['index_L_3']);
+        expect(BONE_CHILDREN.index_L_3).toEqual([]);
+    });
+
+    it('thumb_L chain: _1→_2→[]', () => {
+        expect(BONE_CHILDREN.thumb_L_1).toEqual(['thumb_L_2']);
+        expect(BONE_CHILDREN.thumb_L_2).toEqual([]);
+    });
+
+    it('pinky_R chain: _1→_2→_3→[]', () => {
+        expect(BONE_CHILDREN.pinky_R_1).toEqual(['pinky_R_2']);
+        expect(BONE_CHILDREN.pinky_R_2).toEqual(['pinky_R_3']);
+        expect(BONE_CHILDREN.pinky_R_3).toEqual([]);
+    });
+
+    it('does NOT contain old single finger bones', () => {
+        for (const old of ['thumb_L','index_L','middle_L','ring_L','pinky_L',
+                           'thumb_R','index_R','middle_R','ring_R','pinky_R']) {
+            expect(BONE_CHILDREN).not.toHaveProperty(old);
+        }
     });
 });
 
 describe('PROPORTIONS finger entries', () => {
-    it('F and M have all 10 finger bones with radius', () => {
+    it('F and M have all 28 phalange bones with radius', () => {
+        const phalanges = [
+            'index_L_1','index_L_2','index_L_3',
+            'middle_L_1','middle_L_2','middle_L_3',
+            'ring_L_1','ring_L_2','ring_L_3',
+            'pinky_L_1','pinky_L_2','pinky_L_3',
+            'thumb_L_1','thumb_L_2',
+            'index_R_1','index_R_2','index_R_3',
+            'middle_R_1','middle_R_2','middle_R_3',
+            'ring_R_1','ring_R_2','ring_R_3',
+            'pinky_R_1','pinky_R_2','pinky_R_3',
+            'thumb_R_1','thumb_R_2',
+        ];
         for (const g of ['F','M'])
-            for (const f of ['thumb_L','index_L','middle_L','ring_L','pinky_L',
-                             'thumb_R','index_R','middle_R','ring_R','pinky_R'])
-                expect(PROPORTIONS[g][f]).toHaveProperty('radius');
+            for (const f of phalanges)
+                expect(PROPORTIONS[g][f], `${g}.${f} missing radius`).toHaveProperty('radius');
+    });
+
+    it('phalange radii taper distally: _1 >= _2 >= _3 for index_L', () => {
+        for (const g of ['F', 'M']) {
+            expect(PROPORTIONS[g].index_L_1.radius).toBeGreaterThanOrEqual(PROPORTIONS[g].index_L_2.radius);
+            expect(PROPORTIONS[g].index_L_2.radius).toBeGreaterThanOrEqual(PROPORTIONS[g].index_L_3.radius);
+        }
+    });
+
+    it('does NOT contain old single finger bones', () => {
+        for (const old of ['thumb_L','index_L','middle_L','ring_L','pinky_L',
+                           'thumb_R','index_R','middle_R','ring_R','pinky_R']) {
+            expect(PROPORTIONS.F).not.toHaveProperty(old);
+            expect(PROPORTIONS.M).not.toHaveProperty(old);
+        }
     });
 });
 
@@ -72,7 +153,7 @@ describe('PROPORTIONS', () => {
         expect(PROPORTIONS).toHaveProperty('M');
     });
 
-    it('all 20 bones defined in each preset', () => {
+    it('all 48 bones defined in each preset', () => {
         for (const g of ['F', 'M']) {
             for (const bone of BONE_NAMES) {
                 expect(PROPORTIONS[g], `${g}.${bone} missing`).toHaveProperty(bone);
