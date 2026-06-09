@@ -8,7 +8,7 @@ const JOINT_COLOR   = 0xaaaaaa;
 const SEGMENT_COLOR = 0xcccccc;
 const SELECT_COLOR  = 0x4fc3f7;
 
-const JOINT_RADIUS = 0.055; // visible sphere
+const JOINT_RADIUS = 0.044; // visible sphere (−20% tuning pass)
 const HIT_RADIUS   = 0.12;  // invisible larger sphere for easier click detection
 
 // Bones whose joints must be scaled down to the bone thickness (thin parts:
@@ -36,8 +36,8 @@ export function jointRadiiFor(gender, boneName) {
     const set = (gender === 'M') ? PROPORTIONS.M : PROPORTIONS.F;
     const r = set?.[boneName]?.radius ?? 0.011;
     return {
-        jointR: Math.max(0.0096, r * 1.28),  // −20 % vs first pass (visual tuning)
-        hitR:   Math.max(0.025, r * 3.2),    // hit target kept for clickability
+        jointR: Math.max(0.0077, r * 1.024),  // −20 % ×2 passes (visual tuning)
+        hitR:   Math.max(0.025, r * 3.2),     // hit target kept for clickability
     };
 }
 

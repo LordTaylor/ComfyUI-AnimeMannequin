@@ -56,6 +56,29 @@ const SKELETON_LIMBS = [
     ['shin_L',      'foot_L',      0x5500ff],  // 12-13
 ];
 
+// Per-finger limb color (int) for the viewport skeleton overlay.
+const FINGER_LIMB_COLORS = { thumb: 0xff0000, index: 0xffaa00, middle: 0x00ff00, ring: 0x00aaff, pinky: 0xaa00ff };
+
+// Viewport-only finger "bones": hand→MCP→PIP→DIP per finger, both hands.
+// (2D OpenPose output draws fingers separately via _drawHand — do NOT add these there.)
+function buildFingerLimbs() {
+    const limbs = [];
+    for (const side of ['L', 'R']) {
+        for (const [finger, segs] of [['thumb', 2], ['index', 3], ['middle', 3], ['ring', 3], ['pinky', 3]]) {
+            const col = FINGER_LIMB_COLORS[finger];
+            limbs.push([`hand_${side}`, `${finger}_${side}_1`, col]);
+            for (let i = 1; i < segs; i++) limbs.push([`${finger}_${side}_${i}`, `${finger}_${side}_${i + 1}`, col]);
+        }
+    }
+    return limbs;
+}
+const FINGER_LIMBS = buildFingerLimbs();
+
+// Body limbs + finger limbs — used for the 3-D viewport skeleton overlay only.
+const VIEWPORT_LIMBS = [...SKELETON_LIMBS, ...FINGER_LIMBS];
+// Finger limbs render thinner than body limbs (radial scale vs the shared cylinder).
+const FINGER_LIMB_RADIAL_SCALE = 0.35;
+
 function sobelCanny(sourceCanvas) {
     const W = sourceCanvas.width;
     const H = sourceCanvas.height;
@@ -850,7 +873,7 @@ export class MannequinRenderer {
         const sharedGeo = new THREE.CylinderGeometry(RADIUS, RADIUS, 1, 8, 1);
 
         this._skeletonCylinders = [];
-        for (const [, , hex] of SKELETON_LIMBS) {
+        for (const [, , hex] of VIEWPORT_LIMBS) {
             const mat  = new THREE.MeshBasicMaterial({ color: hex, depthTest: false });
             const mesh = new THREE.Mesh(sharedGeo, mat);
             mesh.renderOrder = 3;
@@ -869,8 +892,8 @@ export class MannequinRenderer {
         const pB = new THREE.Vector3();
         const up = new THREE.Vector3(0, 1, 0);
 
-        for (let i = 0; i < SKELETON_LIMBS.length; i++) {
-            const [a, b] = SKELETON_LIMBS[i];
+        for (let i = 0; i < VIEWPORT_LIMBS.length; i++) {
+            const [a, b] = VIEWPORT_LIMBS[i];
             const boneA = this._bones.get(a);
             const boneB = this._bones.get(b);
             const cyl = this._skeletonCylinders[i];
@@ -884,9 +907,11 @@ export class MannequinRenderer {
             if (len < 0.001) { cyl.visible = false; continue; }
 
             cyl.visible = true;
+            // Finger limbs render thinner than body limbs.
+            const radial = i >= SKELETON_LIMBS.length ? FINGER_LIMB_RADIAL_SCALE : 1;
             // Position at midpoint, scale Y to match limb length, rotate Y→dir
             cyl.position.addVectors(pA, pB).multiplyScalar(0.5);
-            cyl.scale.set(1, len, 1);
+            cyl.scale.set(radial, len, radial);
             cyl.quaternion.setFromUnitVectors(up, dir.normalize());
         }
     }
