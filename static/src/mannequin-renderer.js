@@ -315,6 +315,9 @@ export class MannequinRenderer {
         // Apply proportions (from sceneData or current stored proportions)
         this.applyProportions(sceneData?.proportions ?? {});
 
+        // Derive fingerTipLocal from segment geometry (rotation-invariant, consumed by _computeHandKeypoints)
+        this._computeFingerTipLocals();
+
         this._dirty = true;
     }
 
@@ -767,6 +770,48 @@ export class MannequinRenderer {
             }
         }
         return kps;
+    }
+
+    /**
+     * Populate fingerBone.userData.fingerTipLocal — a bone-local Vector3 from the
+     * knuckle (bone origin) to the fingertip — derived from the finger segment
+     * geometry. Rotation-invariant (mesh is rigidly attached to the bone), so the
+     * stored offset is a true rest-space value. Consumed by _computeHandKeypoints.
+     */
+    _computeFingerTipLocals() {
+        this._mannequinRoot?.updateMatrixWorld(true);
+        const corner = new THREE.Vector3();
+        for (const { bone } of MannequinRenderer._HAND_FINGERS) {
+            for (const side of ['L', 'R']) {
+                const fb = this._bones.get(`${bone}_${side}`);
+                if (!fb) continue;
+                // find the segment mesh for this finger
+                let mesh = null;
+                fb.traverse(o => {
+                    if (!mesh && o.isMesh && o.userData.boneName === `${bone}_${side}` &&
+                        !o.userData.isJoint && !o.userData.isHitTarget && o.geometry) {
+                        mesh = o;
+                    }
+                });
+                if (!mesh) continue;
+                mesh.geometry.computeBoundingBox();
+                const bb = mesh.geometry.boundingBox;
+                if (!bb) continue;
+                let best = null, bestDist = -1;
+                for (let xi = 0; xi < 2; xi++)
+                for (let yi = 0; yi < 2; yi++)
+                for (let zi = 0; zi < 2; zi++) {
+                    corner.set(xi ? bb.max.x : bb.min.x,
+                               yi ? bb.max.y : bb.min.y,
+                               zi ? bb.max.z : bb.min.z);
+                    // geometry-local → world → finger-bone-local (rotation-invariant)
+                    const local = fb.worldToLocal(mesh.localToWorld(corner.clone()));
+                    const d = local.length();
+                    if (d > bestDist) { bestDist = d; best = local; }
+                }
+                if (best) fb.userData.fingerTipLocal = best;
+            }
+        }
     }
 
     _fitDepthCamera(W, H) {

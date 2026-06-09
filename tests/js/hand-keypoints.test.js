@@ -133,3 +133,40 @@ describe('keypoints follow finger rotation', () => {
         expect(kps[5]).toBeTruthy(); // index base present
     });
 });
+
+describe('_computeFingerTipLocals', () => {
+    it('sets fingerTipLocal to the farthest geometry corner in bone-local space', () => {
+        const r = Object.create(MannequinRenderer.prototype);
+        const scene = new THREE.Scene();
+        const hand = new THREE.Object3D(); hand.position.set(0.2, 1, 0); scene.add(hand);
+        const index = new THREE.Object3D(); hand.add(index);              // finger bone at knuckle
+        // segment mesh: a 0.02 x 0.1 x 0.02 box, shifted so it extends -Y from the knuckle
+        const geo = new THREE.BoxGeometry(0.02, 0.1, 0.02);
+        const mesh = new THREE.Mesh(geo);
+        mesh.position.set(0, -0.05, 0);            // box centered 5cm below the bone origin
+        mesh.userData.boneName = 'index_L';
+        index.add(mesh);
+        scene.updateMatrixWorld(true);
+
+        r._bones = new Map([['index_L', index]]);
+        r._mannequinRoot = scene;                  // helper updates world matrices from here
+        r._computeFingerTipLocals();
+
+        const tip = index.userData.fingerTipLocal;
+        expect(tip).toBeTruthy();
+        // farthest corner from bone origin is at about y = -0.1 (box bottom), small x/z
+        expect(tip.y).toBeLessThan(-0.08);
+        expect(Math.abs(tip.x)).toBeLessThan(0.02);
+    });
+
+    it('leaves fingerTipLocal unset when the finger bone has no mesh', () => {
+        const r = Object.create(MannequinRenderer.prototype);
+        const scene = new THREE.Scene();
+        const idx = new THREE.Object3D(); scene.add(idx);
+        scene.updateMatrixWorld(true);
+        r._bones = new Map([['index_L', idx]]);
+        r._mannequinRoot = scene;
+        r._computeFingerTipLocals();
+        expect(idx.userData.fingerTipLocal).toBeUndefined();
+    });
+});
