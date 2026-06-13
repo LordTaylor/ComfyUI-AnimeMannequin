@@ -315,9 +315,22 @@ describe('applyFingerPreset', () => {
 // ── MIRROR_PAIRS fingers ──────────────────────────────────────────────────────
 
 describe('MIRROR_PAIRS fingers', () => {
-    it('includes all 5 finger pairs', () => {
+    it('includes all 14 phalange pairs', () => {
         const flat = MannequinEditor.MIRROR_PAIRS.map(p => p.join('|'));
-        for (const f of ['thumb','index','middle','ring','pinky'])
-            expect(flat).toContain(`${f}_L|${f}_R`);
+        // 4-finger × 3 phalanges + thumb × 2 = 14 pairs
+        const expected = [
+            'thumb_L_1|thumb_R_1', 'thumb_L_2|thumb_R_2',
+            'index_L_1|index_R_1', 'index_L_2|index_R_2', 'index_L_3|index_R_3',
+            'middle_L_1|middle_R_1', 'middle_L_2|middle_R_2', 'middle_L_3|middle_R_3',
+            'ring_L_1|ring_R_1', 'ring_L_2|ring_R_2', 'ring_L_3|ring_R_3',
+            'pinky_L_1|pinky_R_1', 'pinky_L_2|pinky_R_2', 'pinky_L_3|pinky_R_3',
+        ];
+        for (const pair of expected) {
+            expect(flat).toContain(pair);
+        }
+        // old single-bone pairs must be gone
+        for (const f of ['thumb','index','middle','ring','pinky']) {
+            expect(flat).not.toContain(`${f}_L|${f}_R`);
+        }
     });
 });

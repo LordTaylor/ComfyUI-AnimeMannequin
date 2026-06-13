@@ -172,9 +172,11 @@ export class MannequinEditor {
         ['forearm_L',  'forearm_R'],  ['hand_L',      'hand_R'],
         ['thigh_L',    'thigh_R'],    ['shin_L',      'shin_R'],
         ['foot_L',     'foot_R'],
-        ['thumb_L',  'thumb_R'],  ['index_L', 'index_R'],
-        ['middle_L', 'middle_R'], ['ring_L',  'ring_R'],
-        ['pinky_L',  'pinky_R'],
+        ['thumb_L_1', 'thumb_R_1'],  ['thumb_L_2', 'thumb_R_2'],
+        ['index_L_1', 'index_R_1'],  ['index_L_2', 'index_R_2'],  ['index_L_3', 'index_R_3'],
+        ['middle_L_1','middle_R_1'], ['middle_L_2','middle_R_2'], ['middle_L_3','middle_R_3'],
+        ['ring_L_1',  'ring_R_1'],   ['ring_L_2',  'ring_R_2'],   ['ring_L_3',  'ring_R_3'],
+        ['pinky_L_1', 'pinky_R_1'],  ['pinky_L_2', 'pinky_R_2'],  ['pinky_L_3', 'pinky_R_3'],
     ];
 
     mirrorPose(direction = 'L_to_R') {

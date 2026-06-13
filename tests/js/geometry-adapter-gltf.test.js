@@ -130,12 +130,31 @@ describe('Bug 4 — DoubleSide material: required for mirrored R-side meshes', (
 // Regression guard: every bone (except torso virtual root) must have a GLB node
 // name defined in both gender variants.
 
+// Phalange bones (names matching /_(L|R)_\d$/) have no MESH_MAP entry —
+// their geometry comes from hand.glb via HAND_NODE_MAP.
+const isPhalange = (bone) => /_(L|R)_\d$/.test(bone);
+// Old single-bone finger names that must NOT exist in MESH_MAP after cleanup.
+const OLD_FINGER_KEYS = [
+    'thumb_L','index_L','middle_L','ring_L','pinky_L',
+    'thumb_R','index_R','middle_R','ring_R','pinky_R',
+];
+
 describe('MESH_MAP completeness', () => {
     for (const gender of ['male', 'female']) {
         describe(`${gender}`, () => {
-            it('has an entry for every BONE_NAME', () => {
+            it('has an entry for every non-phalange BONE_NAME', () => {
                 for (const bone of BONE_NAMES) {
+                    if (isPhalange(bone)) continue; // phalanges live in hand.glb
                     expect(MESH_MAP[gender], `${gender}.${bone} missing from MESH_MAP`).toHaveProperty(bone);
+                }
+            });
+
+            it('has NO old single-bone finger keys (orphan cleanup)', () => {
+                for (const key of OLD_FINGER_KEYS) {
+                    expect(
+                        Object.prototype.hasOwnProperty.call(MESH_MAP[gender], key),
+                        `${gender}.${key} is an orphan — should have been removed`
+                    ).toBe(false);
                 }
             });
 
@@ -286,9 +305,9 @@ describe('HAND_NODE_MAP (left-hand phalange → hand.glb node)', () => {
 // don't swallow thin geometry and adjacent hit spheres don't overlap.
 
 describe('jointRadiiFor', () => {
-    it('returns the default 0.055/0.12 for ordinary body bones', () => {
+    it('returns the default 0.044/0.12 for ordinary body bones', () => {
         const r = jointRadiiFor('F', 'forearm_L');
-        expect(r.jointR).toBeCloseTo(0.055, 5);
+        expect(r.jointR).toBeCloseTo(0.044, 5);
         expect(r.hitR).toBeCloseTo(0.12, 5);
     });
 
@@ -313,38 +332,35 @@ describe('jointRadiiFor', () => {
 });
 
 // ── MESH_MAP finger nodes ─────────────────────────────────────────────────────
-// Each finger bone must map to its own GLB node (promoted from EXTRA_NODES).
+// Phalange bones (e.g. index_L_1) are NOT in MESH_MAP — geometry comes from hand.glb
+// via HAND_NODE_MAP. Old single-bone finger keys (thumb_L, index_L, …) were removed.
 
 describe('MESH_MAP finger nodes', () => {
-    it('maps every finger bone to a GLB node for F and M', () => {
-        const expectedNodes = {
-            female: {
-                thumb_L:  'GEO-thumb_female_primitive_stylized.L',
-                index_L:  'GEO-finger_index_female_primitive_stylized.L',
-                middle_L: 'GEO-finger_middle_female_primitive_stylized.L',
-                ring_L:   'GEO-finger_ring_female_primitive_stylized.L',
-                pinky_L:  'GEO-finger_pinky_female_primitive_stylized.L',
-                thumb_R:  'GEO-thumb_female_primitive_stylized.R',
-                index_R:  'GEO-finger_index_female_primitive_stylized.R',
-                middle_R: 'GEO-finger_middle_female_primitive_stylized.R',
-                ring_R:   'GEO-finger_ring_female_primitive_stylized.R',
-                pinky_R:  'GEO-finger_pinky_female_primitive_stylized.R',
-            },
-            male: {
-                thumb_L:  'GEO-thumb_male_primitive_stylized.L',
-                index_L:  'GEO-finger_index_male_primitive_stylized.L',
-                middle_L: 'GEO-finger_middle_male_primitive_stylized.L',
-                ring_L:   'GEO-finger_ring_male_primitive_stylized.L',
-                pinky_L:  'GEO-finger_pinky_male_primitive_stylized.L',
-                thumb_R:  'GEO-thumb_male_primitive_stylized.R',
-                index_R:  'GEO-finger_index_male_primitive_stylized.R',
-                middle_R: 'GEO-finger_middle_male_primitive_stylized.R',
-                ring_R:   'GEO-finger_ring_male_primitive_stylized.R',
-                pinky_R:  'GEO-finger_pinky_male_primitive_stylized.R',
-            },
-        };
-        for (const [key, bones] of Object.entries(expectedNodes))
-            for (const [bone, node] of Object.entries(bones))
-                expect(MESH_MAP[key][bone]).toBe(node);
+    it('has NO old single-bone finger entries (they were cleaned up)', () => {
+        const OLD_KEYS = [
+            'thumb_L','index_L','middle_L','ring_L','pinky_L',
+            'thumb_R','index_R','middle_R','ring_R','pinky_R',
+        ];
+        for (const gender of ['male', 'female']) {
+            for (const key of OLD_KEYS) {
+                expect(
+                    Object.prototype.hasOwnProperty.call(MESH_MAP[gender], key),
+                    `${gender}.${key} should not exist in MESH_MAP`
+                ).toBe(false);
+            }
+        }
+    });
+
+    it('phalange bones are absent from MESH_MAP (hand.glb path instead)', () => {
+        const phalanges = ['index_L_1','index_L_2','index_L_3','thumb_L_1','thumb_L_2',
+                           'index_R_1','thumb_R_1'];
+        for (const gender of ['male', 'female']) {
+            for (const bone of phalanges) {
+                expect(
+                    Object.prototype.hasOwnProperty.call(MESH_MAP[gender], bone),
+                    `${gender}.${bone} should not be in MESH_MAP`
+                ).toBe(false);
+            }
+        }
     });
 });
