@@ -117,6 +117,24 @@ export class AppStore {
         this._notify();
     }
 
+    /** Dodaj prop. */
+    addProp(prop) {
+        this._state = { ...this._state, props: [...(this._state.props ?? []), { ...prop }] };
+        this._notify();
+    }
+
+    /** Usuń prop po id. */
+    removeProp(id) {
+        this._state = { ...this._state, props: (this._state.props ?? []).filter(p => p.id !== id) };
+        this._notify();
+    }
+
+    /** Patch jednego propa po id (nieznane id → no-op). */
+    updateProp(id, partial) {
+        this._state = { ...this._state, props: (this._state.props ?? []).map(p => p.id === id ? { ...p, ...partial } : p) };
+        this._notify();
+    }
+
     /** Subskrypcja — zwraca funkcję do anulowania. */
     subscribe(listener) {
         this._listeners.add(listener);

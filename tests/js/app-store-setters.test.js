@@ -206,3 +206,24 @@ describe('setOutputSize', () => {
         expect(spy).toHaveBeenCalledTimes(1);
     });
 });
+
+// ── prop setters ──────────────────────────────────────────────────────────────
+
+describe('prop setters', () => {
+    it('addProp / updateProp / removeProp mutate immutably', () => {
+        const s = new AppStore(defaultState());
+        s.addProp({ id:'p1', source:'lib', ref:'hat_01', bone:'head', position:[0,0,0], rotation:[0,0,0,1], scale:1 });
+        expect(s.getState().props).toHaveLength(1);
+        s.updateProp('p1', { bone:'hand_R', scale:2 });
+        expect(s.getState().props[0].bone).toBe('hand_R');
+        expect(s.getState().props[0].scale).toBe(2);
+        s.removeProp('p1');
+        expect(s.getState().props).toHaveLength(0);
+    });
+    it('updateProp on unknown id is a no-op', () => {
+        const s = new AppStore(defaultState());
+        s.addProp({ id:'p1', source:'lib', ref:'h', bone:'head', position:[0,0,0], rotation:[0,0,0,1], scale:1 });
+        s.updateProp('nope', { scale:9 });
+        expect(s.getState().props[0].scale).toBe(1);
+    });
+});

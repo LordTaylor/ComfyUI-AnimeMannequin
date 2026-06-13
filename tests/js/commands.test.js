@@ -19,6 +19,7 @@ const {
     SetGenderCommand, ResetPoseCommand, MirrorPoseCommand,
     RandomPoseCommand, SetJointColorModeCommand,
     SetBgImageCommand, SetCropFrameCfgCommand,
+    AddPropCommand, RemovePropCommand, TransformPropCommand,
 } = await import('../../static/src/commands.js');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -270,5 +271,29 @@ describe('SetCropFrameCfgCommand', () => {
         const cmd = new SetCropFrameCfgCommand(prev, { ...prev, color: '#ff0000' });
         cmd.execute(s); cmd.undo(s);
         expect(s.getState().cropFrame.color).toBe('#ffffff');
+    });
+});
+
+// ── prop commands ─────────────────────────────────────────────────────────────
+
+describe('prop commands', () => {
+    const mkProp = () => ({ id:'p1', source:'lib', ref:'hat_01', bone:'head', position:[0,0,0], rotation:[0,0,0,1], scale:1 });
+    it('AddPropCommand adds; undo removes', () => {
+        const s = new AppStore(defaultState());
+        const c = new AddPropCommand(mkProp());
+        c.execute(s); expect(s.getState().props).toHaveLength(1);
+        c.undo(s);    expect(s.getState().props).toHaveLength(0);
+    });
+    it('RemovePropCommand removes; undo re-adds with same id', () => {
+        const s = new AppStore(defaultState()); s.addProp(mkProp());
+        const c = new RemovePropCommand(mkProp());
+        c.execute(s); expect(s.getState().props).toHaveLength(0);
+        c.undo(s);    expect(s.getState().props[0].id).toBe('p1');
+    });
+    it('TransformPropCommand applies next; undo restores prev', () => {
+        const s = new AppStore(defaultState()); s.addProp(mkProp());
+        const c = new TransformPropCommand('p1', { scale:1, bone:'head' }, { scale:3, bone:'hand_R' });
+        c.execute(s); expect(s.getState().props[0].scale).toBe(3); expect(s.getState().props[0].bone).toBe('hand_R');
+        c.undo(s);    expect(s.getState().props[0].scale).toBe(1); expect(s.getState().props[0].bone).toBe('head');
     });
 });
