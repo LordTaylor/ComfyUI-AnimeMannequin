@@ -87,7 +87,20 @@ const objectsPanelApi = {
 };
 const objectsPanel = new PropsPanel(objectsPanelApi);
 objectsPanel.mount(document.body);
-store.subscribe(() => objectsPanel.refresh());
+// Keep the 3-D props in sync with the store: drop removed props, apply transform/bone
+// changes (covers TransformPropCommand undo/redo, bone dropdown, AddPropCommand undo).
+// New props are realized by the panel api on add — NOT here (avoids double-realize).
+store.subscribe(() => {
+    const desired = store.getState().props ?? [];
+    const ids = new Set(desired.map(p => p.id));
+    for (const id of [...renderer.props.keys()]) {
+        if (!ids.has(id)) renderer.removeProp(id);
+    }
+    for (const p of desired) {
+        if (renderer.props.has(p.id)) renderer.updatePropTransform(p);
+    }
+    objectsPanel.refresh();
+});
 
 // Realize every prop in the store (scene load): library props attach; uploaded props
 // autoload from the IndexedDB cache, else are tracked as missing. Live add/remove go

@@ -252,3 +252,29 @@ describe('Commands use specific setters', () => {
         expect(() => new RandomPoseCommand({}, undefined)).toThrow();
     });
 });
+
+// ── B2: getSceneData must include props from the store ────────────────────────
+// MannequinRenderer is mocked to vi.fn() in this file, so we import the real
+// getSceneData via a separate vi.importActual call to test the actual method.
+
+describe('MannequinRenderer.getSceneData — includes props', () => {
+    it('getSceneData includes props from the store', async () => {
+        const real = await vi.importActual('../../static/src/mannequin-renderer.js');
+        const { MannequinRenderer } = real;
+
+        const r = Object.create(MannequinRenderer.prototype);
+        r._bones = new Map();
+        r._gender = 'F';
+        r._proportions = {};
+        r.getCameraState = () => ({ azimuth: 0, elevation: 5, distance: 2.5 });
+        r._store = {
+            getState: () => ({
+                props: [{ id: 'p1', source: 'lib', ref: 'hat_01', bone: 'head',
+                          position: [0, 0, 0], rotation: [0, 0, 0, 1], scale: 1 }],
+            }),
+        };
+        const data = r.getSceneData('F');
+        expect(data.props).toHaveLength(1);
+        expect(data.props[0].id).toBe('p1');
+    });
+});

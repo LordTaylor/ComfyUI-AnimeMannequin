@@ -576,6 +576,7 @@ export class MannequinRenderer {
             bones,
             camera: this.getCameraState(),   // real orbit angle (clamped to safe range)
             proportions: { ...this._proportions },
+            props: this._store?.getState().props ?? [],
         };
     }
 

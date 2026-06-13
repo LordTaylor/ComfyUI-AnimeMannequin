@@ -336,8 +336,15 @@ export class MannequinEditor {
         this._raycaster.setFromCamera(this._mouse, this._renderer.camera);
         const pickables = [];
         this._renderer.scene.traverse(obj => {
-            if (obj.userData.isJoint || (obj.isMesh && obj.userData.boneName && !obj.userData.isJoint))
+            if (obj.userData.isJoint || (obj.isMesh && obj.userData.boneName && !obj.userData.isJoint)) {
                 pickables.push(obj);
+                return;
+            }
+            if (obj.isMesh) {
+                // include meshes that belong to a prop (walk ancestors for isProp)
+                let n = obj;
+                while (n) { if (n.userData && n.userData.isProp) { pickables.push(obj); break; } n = n.parent; }
+            }
         });
         const hits = this._raycaster.intersectObjects(pickables, false);
 
