@@ -27,6 +27,7 @@ export function defaultState(gender = 'F') {
         outputHeight:   1024,
         bgImage:   { dataUrl: null, opacity: 0.5, zoom: 1.0, offsetX: 0, offsetY: 0 },
         cropFrame: { color: '#ffffff', opacity: 0.55 },
+        props:     [],
     };
 }
 
@@ -52,6 +53,7 @@ export class AppStore {
             bustCfg:     { ...this._state.bustCfg },
             bgImage:     { ...this._state.bgImage },
             cropFrame:   { ...this._state.cropFrame },
+            props: (this._state.props ?? []).map(p => ({ ...p, position: [...p.position], rotation: [...p.rotation] })),
         };
     }
 
@@ -112,6 +114,24 @@ export class AppStore {
     /** Patch crop frame style — niezmienione pola zostają. */
     setCropFrame(partial) {
         this._state = { ...this._state, cropFrame: { ...this._state.cropFrame, ...partial } };
+        this._notify();
+    }
+
+    /** Dodaj prop. */
+    addProp(prop) {
+        this._state = { ...this._state, props: [...(this._state.props ?? []), { ...prop }] };
+        this._notify();
+    }
+
+    /** Usuń prop po id. */
+    removeProp(id) {
+        this._state = { ...this._state, props: (this._state.props ?? []).filter(p => p.id !== id) };
+        this._notify();
+    }
+
+    /** Patch jednego propa po id (nieznane id → no-op). */
+    updateProp(id, partial) {
+        this._state = { ...this._state, props: (this._state.props ?? []).map(p => p.id === id ? { ...p, ...partial } : p) };
         this._notify();
     }
 

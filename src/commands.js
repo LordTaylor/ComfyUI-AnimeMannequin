@@ -199,3 +199,24 @@ export class SetCropFrameCfgCommand extends Command {
     undo(store)    { store.setCropFrame(this._prev); }
     get description() { return 'Set crop frame style'; }
 }
+
+export class AddPropCommand extends Command {
+    constructor(prop) { super(); this._prop = { ...prop }; }
+    execute(store) { store.addProp(this._prop); }
+    undo(store)    { store.removeProp(this._prop.id); }
+    get description() { return `Add prop ${this._prop.ref}`; }
+}
+
+export class RemovePropCommand extends Command {
+    constructor(prop) { super(); this._prop = { ...prop }; }
+    execute(store) { store.removeProp(this._prop.id); }
+    undo(store)    { store.addProp(this._prop); }
+    get description() { return `Remove prop ${this._prop.ref}`; }
+}
+
+export class TransformPropCommand extends Command {
+    constructor(id, prev, next) { super(); this._id = id; this._prev = { ...prev }; this._next = { ...next }; }
+    execute(store) { store.updateProp(this._id, this._next); }
+    undo(store)    { store.updateProp(this._id, this._prev); }
+    get description() { return `Transform prop ${this._id}`; }
+}

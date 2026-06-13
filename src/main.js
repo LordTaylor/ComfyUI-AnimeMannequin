@@ -11,6 +11,10 @@ import { HandsPanel } from './panels/hands-panel.js';
 import { AppStore, defaultState } from './app-store.js';
 import { CommandHistory, SetBgImageCommand } from './commands.js';
 import { parseCustomGLB, setCustomGLB, clearCustomGLB } from './geometry-adapter-gltf.js';
+import { PropsPanel } from './panels/props-panel.js';
+import { PropsController } from './props-controller.js';
+import { AddPropCommand, RemovePropCommand } from './commands.js';
+import { libraryEntry } from './props.js';
 
 const params = new URLSearchParams(location.search);
 const mode   = params.get('mode') ?? 'standalone';
@@ -38,6 +42,76 @@ overlaysPanel.mount(document.body);
 
 const handsPanel = new HandsPanel(editor);
 handsPanel.mount(document.body);
+
+// ── Props panel ────────────────────────────────────────────────────────────────
+const propsController = new PropsController(renderer);
+const objectsPanelApi = {
+    addLibraryProp(id) {
+        const entry = libraryEntry(id);
+        if (!entry) return;
+        const propState = { id: 'p-' + Date.now(), source: 'lib', ref: id,
+            bone: entry.defaultBone, position: [0,0,0], rotation: [0,0,0,1], scale: 1 };
+        history.execute(new AddPropCommand(propState), store);
+        propsController.realize(propState).then(() => objectsPanel.refresh());
+    },
+    addUpload(filename, buf) {
+        const missingMatch = propsController.missingProps()
+            .find(m => m.source === 'upload' && m.ref === filename);
+        if (missingMatch) {
+            // recover the existing (missing) prop at its saved transform
+            propsController.addUpload(missingMatch, buf).then(() => objectsPanel.refresh());
+            return;
+        }
+        const propState = { id: 'p-' + Date.now(), source: 'upload', ref: filename,
+            bone: 'hand_R', position: [0,0,0], rotation: [0,0,0,1], scale: 1 };
+        history.execute(new AddPropCommand(propState), store);
+        propsController.addUpload(propState, buf).then(() => objectsPanel.refresh());
+    },
+    removeProp(id) {
+        const prop = store.getState().props?.find(p => p.id === id);
+        if (!prop) return;
+        history.execute(new RemovePropCommand(prop), store);
+        propsController.remove(id);
+        objectsPanel.refresh();
+    },
+    selectProp(_id) {
+        // TODO gizmo select wired in PR8
+    },
+    listProps() {
+        const missing = propsController.missingProps();
+        return (store.getState().props ?? []).map(p => ({
+            id: p.id, ref: p.ref, bone: p.bone,
+            missing: missing.some(m => m.id === p.id),
+        }));
+    },
+};
+const objectsPanel = new PropsPanel(objectsPanelApi);
+objectsPanel.mount(document.body);
+// Keep the 3-D props in sync with the store: drop removed props, apply transform/bone
+// changes (covers TransformPropCommand undo/redo, bone dropdown, AddPropCommand undo).
+// New props are realized by the panel api on add — NOT here (avoids double-realize).
+store.subscribe(() => {
+    const desired = store.getState().props ?? [];
+    const ids = new Set(desired.map(p => p.id));
+    for (const id of [...renderer.props.keys()]) {
+        if (!ids.has(id)) renderer.removeProp(id);
+    }
+    for (const p of desired) {
+        if (renderer.props.has(p.id)) renderer.updatePropTransform(p);
+    }
+    objectsPanel.refresh();
+});
+
+// Realize every prop in the store (scene load): library props attach; uploaded props
+// autoload from the IndexedDB cache, else are tracked as missing. Live add/remove go
+// through the panel api directly, so this is only for bulk scene-load.
+async function realizeAllProps() {
+    for (const p of store.getState().props ?? []) {
+        await propsController.realize(p);
+    }
+    objectsPanel.refresh();
+}
+
 const btnOverlays = document.getElementById('btn-overlays');
 // (panel toggles wired together below via the side-panel coordinator)
 
@@ -118,6 +192,8 @@ showLoading(`Loading ${gender === 'F' ? 'female' : 'male'} model…`);
 try {
     if (initScene?.proportions) store.setProportions(initScene.proportions);
     await editor.buildMannequin(gender, initScene ?? defaultScene(gender));
+    if (initScene?.props?.length) store.setState({ props: initScene.props });
+    await realizeAllProps();
     hideLoading();
 } catch (err) {
     if (loadingMsg) {
@@ -169,9 +245,10 @@ const btnProps = document.getElementById('btn-props');
 // ── Docked side panels — only one open at a time (Poses ⟷ Model) ─────────────────
 // Floating panels (Overlays, Bust) stay independent and are wired separately below.
 const SIDE_PANELS = [
-    { panel: poseLib,    btn: document.getElementById('btn-poses') },
-    { panel: propsPanel, btn: btnProps },
-    { panel: handsPanel, btn: document.getElementById('btn-hands') },
+    { panel: poseLib,      btn: document.getElementById('btn-poses') },
+    { panel: propsPanel,   btn: btnProps },
+    { panel: handsPanel,   btn: document.getElementById('btn-hands') },
+    { panel: objectsPanel, btn: document.getElementById('btn-objects') },
 ];
 function toggleSidePanel(target) {
     const willOpen = !target.panel.isVisible();

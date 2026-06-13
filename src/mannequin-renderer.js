@@ -144,6 +144,8 @@ export class MannequinRenderer {
         this._bones   = new Map();
         // Segment group map: name → THREE.Group (from adapter)
         this._segments = new Map();
+        // Prop Object3D map: propId → Object3D
+        this._props = new Map();
 
         this._gender = 'F';
         this._mannequinRoot = new THREE.Group();
@@ -293,6 +295,48 @@ export class MannequinRenderer {
 
     markDirty() { this._dirty = true; }
 
+    /** Attach a loaded prop object under its target bone group (follows the pose). */
+    attachProp(propState, object3d) {
+        const bone = this._bones.get(propState.bone);
+        if (!bone) return;
+        object3d.userData.isProp = true;
+        object3d.userData.propId = propState.id;
+        const [px, py, pz] = propState.position;
+        const [rx, ry, rz, rw] = propState.rotation;
+        object3d.position.set(px, py, pz);
+        object3d.quaternion.set(rx, ry, rz, rw);
+        const s = propState.scale ?? 1;
+        object3d.scale.set(s, s, s);
+        bone.add(object3d);
+        this._props.set(propState.id, object3d);
+        this.markDirty();
+    }
+
+    /** Apply a new bone/transform to an already-attached prop. */
+    updatePropTransform(propState) {
+        const obj = this._props.get(propState.id);
+        if (!obj) return;
+        const targetBone = this._bones.get(propState.bone);
+        if (targetBone && obj.parent !== targetBone) targetBone.add(obj); // THREE re-parents (removes from old parent)
+        const [px, py, pz] = propState.position;
+        const [rx, ry, rz, rw] = propState.rotation;
+        obj.position.set(px, py, pz);
+        obj.quaternion.set(rx, ry, rz, rw);
+        const s = propState.scale ?? 1;
+        obj.scale.set(s, s, s);
+        this.markDirty();
+    }
+
+    /** Remove a prop from the scene. */
+    removeProp(id) {
+        const obj = this._props.get(id);
+        if (obj && obj.parent) obj.parent.remove(obj);
+        this._props.delete(id);
+        this.markDirty();
+    }
+
+    get props() { return this._props; }
+
     async buildMannequin(gender, sceneData) {
         this._gender = gender;
         this._mannequinRoot.traverse(obj => {
@@ -302,6 +346,7 @@ export class MannequinRenderer {
         this._mannequinRoot.clear();
         this._bones.clear();
         this._segments.clear();
+        this._props.clear();
 
         const segments = await buildSegments(gender);
         const offsets  = await computeBoneOffsets(gender);
@@ -531,6 +576,7 @@ export class MannequinRenderer {
             bones,
             camera: this.getCameraState(),   // real orbit angle (clamped to safe range)
             proportions: { ...this._proportions },
+            props: this._store?.getState().props ?? [],
         };
     }
 
