@@ -55,6 +55,13 @@ const objectsPanelApi = {
         propsController.realize(propState).then(() => objectsPanel.refresh());
     },
     addUpload(filename, buf) {
+        const missingMatch = propsController.missingProps()
+            .find(m => m.source === 'upload' && m.ref === filename);
+        if (missingMatch) {
+            // recover the existing (missing) prop at its saved transform
+            propsController.addUpload(missingMatch, buf).then(() => objectsPanel.refresh());
+            return;
+        }
         const propState = { id: 'p-' + Date.now(), source: 'upload', ref: filename,
             bone: 'hand_R', position: [0,0,0], rotation: [0,0,0,1], scale: 1 };
         history.execute(new AddPropCommand(propState), store);
@@ -80,6 +87,17 @@ const objectsPanelApi = {
 };
 const objectsPanel = new PropsPanel(objectsPanelApi);
 objectsPanel.mount(document.body);
+store.subscribe(() => objectsPanel.refresh());
+
+// Realize every prop in the store (scene load): library props attach; uploaded props
+// autoload from the IndexedDB cache, else are tracked as missing. Live add/remove go
+// through the panel api directly, so this is only for bulk scene-load.
+async function realizeAllProps() {
+    for (const p of store.getState().props ?? []) {
+        await propsController.realize(p);
+    }
+    objectsPanel.refresh();
+}
 
 const btnOverlays = document.getElementById('btn-overlays');
 // (panel toggles wired together below via the side-panel coordinator)
@@ -161,6 +179,8 @@ showLoading(`Loading ${gender === 'F' ? 'female' : 'male'} model…`);
 try {
     if (initScene?.proportions) store.setProportions(initScene.proportions);
     await editor.buildMannequin(gender, initScene ?? defaultScene(gender));
+    if (initScene?.props?.length) store.setState({ props: initScene.props });
+    await realizeAllProps();
     hideLoading();
 } catch (err) {
     if (loadingMsg) {
