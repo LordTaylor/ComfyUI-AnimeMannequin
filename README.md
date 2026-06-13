@@ -2,7 +2,7 @@
 
 A custom node for ComfyUI that lets you pose a stylized 3D humanoid mannequin and export **pose**, **depth**, and **canny** control images — ready to feed into ControlNet pipelines.
 
-![AnimeMannequin editor](docs/images/preview.png)
+> **▶ Try it live (one-page editor):** https://lordtaylor.github.io/ComfyUI-AnimeMannequin/
 
 > **Full documentation, bone naming reference, and bust parameter guide → [Wiki](https://github.com/LordTaylor/ComfyUI-AnimeMannequin/wiki)**
 
