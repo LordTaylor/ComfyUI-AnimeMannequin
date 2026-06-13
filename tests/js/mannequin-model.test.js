@@ -203,6 +203,22 @@ describe('defaultScene', () => {
     });
 });
 
+describe('scene props serialization', () => {
+    it('defaultScene includes props: []', () => {
+        expect(defaultScene('F').props).toEqual([]);
+    });
+    it('jsonToScene fills missing props with []', () => {
+        const scene = defaultScene('F');
+        const json = JSON.stringify({ version: scene.version, gender:'F', bones: scene.bones, camera: scene.camera });
+        expect(jsonToScene(json).props).toEqual([]);
+    });
+    it('jsonToScene preserves provided props', () => {
+        const scene = defaultScene('F');
+        scene.props = [{ id:'p1', source:'upload', ref:'s.glb', bone:'hand_R', position:[0,0,0], rotation:[0,0,0,1], scale:1 }];
+        expect(jsonToScene(JSON.stringify(scene)).props).toHaveLength(1);
+    });
+});
+
 describe('sceneToJSON / jsonToScene roundtrip', () => {
     it('preserves all bone rotations and camera', () => {
         const original = defaultScene('M');

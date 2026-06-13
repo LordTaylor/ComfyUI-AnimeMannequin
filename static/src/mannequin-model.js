@@ -197,6 +197,7 @@ export function defaultScene(gender = 'F') {
         bones,
         camera: { azimuth: 0, elevation: 5, distance: 2.5 },
         proportions: defaultProportions(),
+        props: [],
     };
 }
 
@@ -214,5 +215,6 @@ export function jsonToScene(json) {
         if (!parsed.bones[name]) parsed.bones[name] = { rotation: [...IDENTITY_QUAT] };
     }
     if (!parsed.proportions) parsed.proportions = defaultProportions();
+    if (!Array.isArray(parsed.props)) parsed.props = [];
     return parsed;
 }

@@ -138,3 +138,18 @@ describe('AppStore', () => {
         expect(s2).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('props state', () => {
+    it('defaultState has an empty props array', () => {
+        expect(defaultState().props).toEqual([]);
+    });
+    it('getState returns a deep copy of props (outer mutation does not leak)', () => {
+        const s = new AppStore(defaultState());
+        s.setState({ props: [{ id:'p1', source:'lib', ref:'hat_01', bone:'head', position:[0,0,0], rotation:[0,0,0,1], scale:1 }] });
+        const got = s.getState();
+        got.props[0].bone = 'hand_R';
+        got.props.push({ id:'x' });
+        expect(s.getState().props).toHaveLength(1);
+        expect(s.getState().props[0].bone).toBe('head');
+    });
+});

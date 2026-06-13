@@ -27,6 +27,7 @@ export function defaultState(gender = 'F') {
         outputHeight:   1024,
         bgImage:   { dataUrl: null, opacity: 0.5, zoom: 1.0, offsetX: 0, offsetY: 0 },
         cropFrame: { color: '#ffffff', opacity: 0.55 },
+        props:     [],
     };
 }
 
@@ -52,6 +53,7 @@ export class AppStore {
             bustCfg:     { ...this._state.bustCfg },
             bgImage:     { ...this._state.bgImage },
             cropFrame:   { ...this._state.cropFrame },
+            props: (this._state.props ?? []).map(p => ({ ...p, position: [...p.position], rotation: [...p.rotation] })),
         };
     }
 
