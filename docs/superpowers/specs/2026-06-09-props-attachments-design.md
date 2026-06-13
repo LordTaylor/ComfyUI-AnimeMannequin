@@ -26,6 +26,7 @@ ControlNet). Nie wpływa na szkielet OpenPose.
 - Trwałość: props zapisywane w stanie i w **scenie JSON** (save/load + round-trip ComfyUI).
 - Undo/redo dla add/remove/transform (Command pattern).
 - Biblioteka sterowana manifestem; start z działającym uploadem + 0–2 przykładami.
+- Cache uploadowanych GLB w IndexedDB + autoload po reloadzie; lista brakujących z komunikatem (§3a).
 
 **Poza zakresem v1 (osobny krok później):**
 - Serwerowy re-render propsów w `glb_renderer.py` / `headless_render.js` (analogicznie do
@@ -50,11 +51,27 @@ props: [
 ]
 ```
 
-- Upload: geometria nie jest serializowana do JSON (za duża) — przechowywana w sesji;
-  scena zapisuje `source:'upload'` + `ref` (nazwa), a po reloadzie bez pliku prop jest
-  „brakujący" (placeholder/pominięty). Biblioteczne (`source:'lib'`) odtwarzają się z manifestu.
+- **Metadane zawsze zapisywane** w scenie: `source`, `ref` (nazwa pliku/id), `bone`,
+  `position`, `rotation`, `scale`. (Lekkie — bez problemu.) Tylko sama **geometria GLB
+  uploadu** nie idzie do JSON (za duża).
+- Biblioteczne (`source:'lib'`) odtwarzają się z manifestu (geometria z repo).
 - `getSceneData`/`applyScene`/`jsonToScene` w `mannequin-model.js` obsługują tablicę `props`
   (brak pola → `[]`, jak przy innych polach).
+
+### 3a. Odzyskiwanie uploadowanych propsów (user nie traci śladu)
+
+Przeglądarka nie ma dostępu do ścieżek dysku usera (sandbox) — „autoload z systemowej
+ścieżki" wprost niemożliwy. Przeglądarkowy odpowiednik:
+
+- **Cache GLB w IndexedDB** — przy uploadzie blob jest zapisywany w IndexedDB (klucz =
+  nazwa pliku + hash zawartości). Po wczytaniu sceny każdy `source:'upload'` prop próbuje
+  **autoload z cache** — jeśli jest, odtwarza się automatycznie (z zapisanym transformem).
+- **Brak w cache** (inny komputer / wyczyszczony cache): prop NIE znika — zostaje jako
+  **placeholder** (zachowany `bone` + transform). Panel pokazuje **listę brakujących
+  przedmiotów z nazwami** + komunikat „Brakuje `X.glb` — wczytaj ponownie". Po re-uploadzie
+  pliku o tej nazwie prop wskakuje na zapisane miejsce.
+- Zasada: **po reloadzie user zawsze widzi swoje propsy** (z nazwami i pozycją), nawet gdy
+  geometrii brak — nigdy nie zostaje „bez niczego".
 
 ## 4. Ładowanie i biblioteka
 
@@ -91,7 +108,9 @@ W `mannequin-renderer.js`:
 `static/src/panels/props-panel.js` (wzorzec jak `hands-panel.js`/`pose-library.js`):
 - Sekcja **Biblioteka** — przyciski z `PROP_LIBRARY` (klik → dodaj prop z `defaultBone`).
 - Przycisk **Upload GLB** (input file; po wczytaniu pyta o kość lub bierze domyślną `hand_R`).
-- Lista **dodanych propsów** — select (zaznacza + pokazuje gizmo) / usuń.
+- Lista **dodanych propsów** — select (zaznacza + pokazuje gizmo) / usuń. Brakujące
+  (upload bez geometrii w cache) oznaczone wizualnie + komunikat „wczytaj ponownie `X.glb`"
+  z przyciskiem re-uploadu (§3a).
 - Dla zaznaczonego: dropdown **kość** (z `BONE_NAMES`) + kontrolki **transform**
   (offset XYZ, rotacja, skala) — synchronizowane z gizmem.
 - Toolbar: **nowy przycisk** — uwaga, `#btn-props` jest już zajęty przez „Model" (proporcje).
@@ -112,7 +131,9 @@ mutują `store.props` (jak inne komendy), renderer reaguje. Spójne z istniejąc
 
 - **JS unit:** round-trip sceny z `props` (getSceneData/applyScene/jsonToScene); domyślne `[]`
   gdy brak; mapowanie `defaultBone` z manifestu; aplikacja transformu do stanu; add/remove/
-  transform przez Command (undo cofa); manifest `PROP_LIBRARY` ma poprawny kształt.
+  transform przez Command (undo cofa); manifest `PROP_LIBRARY` ma poprawny kształt;
+  **IndexedDB cache** — zapis/odczyt bloba po kluczu; **brak w cache → prop = placeholder**
+  z zachowanym transformem i wpisem na liście brakujących.
 - **Wizualnie (przeglądarka):** prop doczepiony podąża za pozą (obrót kości rusza props);
   prop jest w depth/canny, NIE w openpose; upload działa; gizmo przesuwa/obraca/skaluje.
 
