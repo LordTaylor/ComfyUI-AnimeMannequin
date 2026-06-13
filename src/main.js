@@ -7,6 +7,7 @@ import { PoseLibrary } from './panels/pose-library.js';
 import { ProportionsPanel } from './panels/proportions-panel.js';
 import { BustDebugPanel } from './panels/bust-debug-panel.js';
 import { OverlaysPanel } from './panels/overlays-panel.js';
+import { HandsPanel } from './panels/hands-panel.js';
 import { AppStore, defaultState } from './app-store.js';
 import { CommandHistory, SetBgImageCommand } from './commands.js';
 import { parseCustomGLB, setCustomGLB, clearCustomGLB } from './geometry-adapter-gltf.js';
@@ -34,6 +35,9 @@ bustDbg.mount(document.body);
 
 const overlaysPanel = new OverlaysPanel(store, history);
 overlaysPanel.mount(document.body);
+
+const handsPanel = new HandsPanel(editor);
+handsPanel.mount(document.body);
 const btnOverlays = document.getElementById('btn-overlays');
 // (panel toggles wired together below via the side-panel coordinator)
 
@@ -167,6 +171,7 @@ const btnProps = document.getElementById('btn-props');
 const SIDE_PANELS = [
     { panel: poseLib,    btn: document.getElementById('btn-poses') },
     { panel: propsPanel, btn: btnProps },
+    { panel: handsPanel, btn: document.getElementById('btn-hands') },
 ];
 function toggleSidePanel(target) {
     const willOpen = !target.panel.isVisible();
@@ -191,12 +196,15 @@ btnOverlays?.addEventListener('click', () => {
 });
 
 const btnColors = document.getElementById('btn-colors');
+// Cycle: OpenPose (colored bones) → Flat (grey joint balls) → All (bones + balls)
+const JOINT_MODE_CYCLE = ['openpose', 'flat', 'all'];
+const JOINT_MODE_LABEL = { openpose: 'OpenPose', flat: 'Flat', all: 'All' };
 btnColors?.addEventListener('click', () => {
     const current = store.getState().jointColorMode;
-    const next    = current === 'openpose' ? 'flat' : 'openpose';
+    const next    = JOINT_MODE_CYCLE[(JOINT_MODE_CYCLE.indexOf(current) + 1) % JOINT_MODE_CYCLE.length];
     store.setState({ jointColorMode: next });
-    btnColors.textContent = next === 'openpose' ? 'OpenPose' : 'Flat';
-    btnColors.classList.toggle('active', next === 'openpose');
+    btnColors.textContent = JOINT_MODE_LABEL[next];
+    btnColors.classList.toggle('active', next !== 'flat');
 });
 
 // ── Mini overflow menu (⋯) ──────────────────────────────────────────────────────
@@ -304,6 +312,7 @@ if (mode === 'standalone') {
     withFeedback(document.getElementById('btn-dl-pose'),  () => { const { pose }  = renderer.captureImages(); download(pose,  'pose.png');  });
     withFeedback(document.getElementById('btn-dl-depth'), () => { const { depth } = renderer.captureImages(); download(depth, 'depth.png'); });
     withFeedback(document.getElementById('btn-dl-canny'), () => { const { canny } = renderer.captureImages(); download(canny, 'canny.png'); });
+    withFeedback(document.getElementById('btn-dl-hands'), () => { const { hands } = renderer.captureImages(); download(hands, 'hands.png'); });
 }
 
 // ── Crop frame ─────────────────────────────────────────────────────────────────

@@ -172,6 +172,11 @@ export class MannequinEditor {
         ['forearm_L',  'forearm_R'],  ['hand_L',      'hand_R'],
         ['thigh_L',    'thigh_R'],    ['shin_L',      'shin_R'],
         ['foot_L',     'foot_R'],
+        ['thumb_L_1', 'thumb_R_1'],  ['thumb_L_2', 'thumb_R_2'],
+        ['index_L_1', 'index_R_1'],  ['index_L_2', 'index_R_2'],  ['index_L_3', 'index_R_3'],
+        ['middle_L_1','middle_R_1'], ['middle_L_2','middle_R_2'], ['middle_L_3','middle_R_3'],
+        ['ring_L_1',  'ring_R_1'],   ['ring_L_2',  'ring_R_2'],   ['ring_L_3',  'ring_R_3'],
+        ['pinky_L_1', 'pinky_R_1'],  ['pinky_L_2', 'pinky_R_2'],  ['pinky_L_3', 'pinky_R_3'],
     ];
 
     mirrorPose(direction = 'L_to_R') {
@@ -210,6 +215,26 @@ export class MannequinEditor {
         }
         if (this._store) this._history.execute(new ResetPoseCommand(prevPose, nextPose), this._store);
         this._renderer.applyScene(sceneData);
+        this._renderer.markDirty();
+    }
+
+    /**
+     * Apply a finger preset (map { boneName: [x,y,z,w] } over the 10 finger bones).
+     * Body bones are preserved. Commits a ResetPoseCommand so undo/redo works.
+     */
+    applyFingerPreset(presetPose) {
+        const prevPose = this._store?.getState().pose ?? {};
+        const nextPose = { ...prevPose };
+        for (const [name, rot] of Object.entries(presetPose)) {
+            if (!Array.isArray(rot) || rot.length < 4) continue;
+            const [x, y, z, w] = rot;
+            nextPose[name] = { x, y, z, w };
+            const bone = this._renderer.bones.get(name);
+            if (bone) bone.quaternion.set(x, y, z, w);
+        }
+        if (this._store) {
+            this._history.execute(new ResetPoseCommand(prevPose, nextPose), this._store);
+        }
         this._renderer.markDirty();
     }
 

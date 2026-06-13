@@ -27,6 +27,11 @@ export const BUST_DEFAULTS = {
 
 
 
+// OpenPose hand: per-finger color; chain wrist→base→j1→j2→tip.
+const HAND_FINGER_COLORS = {
+    thumb:  '#ff0000', index: '#ffaa00', middle: '#00ff00', ring: '#00aaff', pinky: '#aa00ff',
+};
+
 // COCO 18 limb connections — COCO standard (direct shoulder→elbow, hip→knee, etc.)
 // Colors per Openpose-18-keypoints_coco_color_codes_v13 (100 % brightness joint colors).
 // Each entry: [boneA, boneB, lineColorHex]
@@ -50,6 +55,29 @@ const SKELETON_LIMBS = [
     ['thigh_L',     'shin_L',      0x0000ff],  // 11-12
     ['shin_L',      'foot_L',      0x5500ff],  // 12-13
 ];
+
+// Per-finger limb color (int) for the viewport skeleton overlay.
+const FINGER_LIMB_COLORS = { thumb: 0xff0000, index: 0xffaa00, middle: 0x00ff00, ring: 0x00aaff, pinky: 0xaa00ff };
+
+// Viewport-only finger "bones": hand→MCP→PIP→DIP per finger, both hands.
+// (2D OpenPose output draws fingers separately via _drawHand — do NOT add these there.)
+function buildFingerLimbs() {
+    const limbs = [];
+    for (const side of ['L', 'R']) {
+        for (const [finger, segs] of [['thumb', 2], ['index', 3], ['middle', 3], ['ring', 3], ['pinky', 3]]) {
+            const col = FINGER_LIMB_COLORS[finger];
+            limbs.push([`hand_${side}`, `${finger}_${side}_1`, col]);
+            for (let i = 1; i < segs; i++) limbs.push([`${finger}_${side}_${i}`, `${finger}_${side}_${i + 1}`, col]);
+        }
+    }
+    return limbs;
+}
+const FINGER_LIMBS = buildFingerLimbs();
+
+// Body limbs + finger limbs — used for the 3-D viewport skeleton overlay only.
+const VIEWPORT_LIMBS = [...SKELETON_LIMBS, ...FINGER_LIMBS];
+// Finger limbs render thinner than body limbs (radial scale vs the shared cylinder).
+const FINGER_LIMB_RADIAL_SCALE = 0.35;
 
 function sobelCanny(sourceCanvas) {
     const W = sourceCanvas.width;
@@ -143,7 +171,7 @@ export class MannequinRenderer {
         this._groundEnabled = false;
 
         this._dirty = true;
-        this._jointColorMode = 'openpose'; // 'openpose' | 'flat'
+        this._jointColorMode = 'openpose'; // 'openpose' | 'flat' | 'all'
         this._proportions = defaultProportions();
         this._bustCfg = { ...BUST_DEFAULTS };
         this._skeletonLines    = null;
@@ -222,10 +250,11 @@ export class MannequinRenderer {
         this._dirty = true;
     }
 
-    /** Internal — sets joint color mode WITHOUT going through store (avoids infinite loop). */
+    /** Internal — sets joint color mode WITHOUT going through store (avoids infinite loop).
+     *  'openpose' = colored bones only; 'flat' = grey joint balls only; 'all' = both. */
     _applyJointColorModeInternal(mode) {
         this._applyJointColors(mode);
-        if (this._skeletonLines) this._skeletonLines.visible = (mode === 'openpose');
+        if (this._skeletonLines) this._skeletonLines.visible = (mode === 'openpose' || mode === 'all');
         this._scene.traverse(o => {
             if (o.userData.isJoint && !o.userData.isHitTarget) o.visible = (mode !== 'openpose');
         });
@@ -309,6 +338,9 @@ export class MannequinRenderer {
 
         // Apply proportions (from sceneData or current stored proportions)
         this.applyProportions(sceneData?.proportions ?? {});
+
+        // Derive fingerTipLocal from segment geometry (rotation-invariant, consumed by _computeHandKeypoints)
+        this._computeFingerTipLocals();
 
         this._dirty = true;
     }
@@ -402,7 +434,8 @@ export class MannequinRenderer {
     _applyJointColors(mode) {
         this._scene.traverse(obj => {
             if (obj.userData.isJoint && !obj.userData.isHitTarget) {
-                const color = mode === 'openpose'
+                // 'openpose' and 'all' use rainbow joint colors; 'flat' uses neutral grey.
+                const color = mode !== 'flat'
                     ? (OPENPOSE_COLORS[obj.userData.boneName] ?? JOINT_COLOR)
                     : JOINT_COLOR;
                 obj.userData.originalColor = color;
@@ -611,11 +644,12 @@ export class MannequinRenderer {
         gizmos.forEach(o => o.visible = true);
         setJointsVisible(true);
         this._grid.visible = true;
-        if (this._skeletonLines) this._skeletonLines.visible = (this._jointColorMode === 'openpose');
+        if (this._skeletonLines) this._skeletonLines.visible = (this._jointColorMode === 'openpose' || this._jointColorMode === 'all');
         this._dirty = true;
         // pose   = 2D OpenPose skeleton on black bg   → for OpenPose ControlNet
         // openpose = 3D body + skeleton overlay        → visual reference
-        return { pose: poseDataUrl, depth: depthDataUrl, canny: cannyDataUrl, openpose: refDataUrl };
+        const handsDataUrl = this._captureHands(W, H);
+        return { pose: poseDataUrl, depth: depthDataUrl, canny: cannyDataUrl, openpose: refDataUrl, hands: handsDataUrl };
     }
 
     _captureOpenPose(W, H) {
@@ -667,7 +701,161 @@ export class MannequinRenderer {
             }
         }
 
+        for (const side of ['L', 'R']) this._drawHand(ctx, this._computeHandKeypoints(side), W);
+
         return canvas.toDataURL('image/png');
+    }
+
+    _captureHands(W, H) {
+        const canvas = document.createElement('canvas');
+        canvas.width = W; canvas.height = H;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, W, H);
+        for (const side of ['L', 'R']) this._drawHand(ctx, this._computeHandKeypoints(side), W);
+        return canvas.toDataURL('image/png');
+    }
+
+    /** Draw one hand's 21 keypoints + bones onto ctx. */
+    _drawHand(ctx, kps, W) {
+        if (!kps || !kps[0]) return;
+        const lineW = Math.max(2, Math.round(W / 140));
+        const dotR  = Math.max(3, Math.round(W / 180));
+        ctx.lineWidth = lineW; ctx.lineCap = 'round';
+        for (const { bone, start } of MannequinRenderer._HAND_FINGERS) {
+            ctx.strokeStyle = HAND_FINGER_COLORS[bone];
+            const chain = [kps[0], kps[start], kps[start + 1], kps[start + 2], kps[start + 3]];
+            for (let i = 0; i < chain.length - 1; i++) {
+                const a = chain[i], b = chain[i + 1];
+                if (!a || !b) continue;
+                ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+            }
+        }
+        for (let i = 0; i < kps.length; i++) {
+            const p = kps[i];
+            if (!p) continue;
+            ctx.fillStyle = i === 0 ? '#ffffff' : '#dddddd';
+            ctx.beginPath(); ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+
+    // Finger order and the OpenPose 21-kp index where each finger's 4 points start.
+    static _HAND_FINGERS = [
+        { bone: 'thumb',  start: 1  },
+        { bone: 'index',  start: 5  },
+        { bone: 'middle', start: 9  },
+        { bone: 'ring',   start: 13 },
+        { bone: 'pinky',  start: 17 },
+    ];
+
+    /**
+     * 21 OpenPose hand keypoints in screen space for one side ('L'|'R').
+     * kp[0]=wrist; fingers map real phalange joints: MCP(_1), PIP(_2), DIP(_3), tip.
+     * Thumb (2 segments): _1, _2, midpoint(_2,tip), tip.
+     * Tip = distal bone's fingerTipLocal via localToWorld; fallback extrapolates
+     * beyond the distal joint along the last segment direction.
+     */
+    _computeHandKeypoints(side) {
+        const W = this._outputWidth, H = this._outputHeight;
+        const project = (v3) => {
+            const p = v3.clone().project(this._camera);
+            return { x: (p.x * 0.5 + 0.5) * W, y: (-p.y * 0.5 + 0.5) * H };
+        };
+        const worldPos = (bone) => {
+            const v = new THREE.Vector3();
+            bone.getWorldPosition(v);
+            return v;
+        };
+        const kps = new Array(21).fill(null);
+        const wrist = this._bones.get(`hand_${side}`);
+        if (wrist) kps[0] = project(worldPos(wrist));
+
+        for (const { bone: finger, start } of MannequinRenderer._HAND_FINGERS) {
+            const segs = finger === 'thumb' ? 2 : 3;
+            const chain = [];
+            for (let i = 1; i <= segs; i++) {
+                const b = this._bones.get(`${finger}_${side}_${i}`);
+                if (!b) break;
+                chain.push(b);
+            }
+            if (!chain.length) continue;
+
+            const joints = chain.map(worldPos);  // MCP, (PIP), (DIP)
+            const distal = chain[chain.length - 1];
+
+            // Tip: stored rest-space offset, else extrapolate past the distal joint.
+            let tipWorld;
+            const tipLocal = distal.userData && distal.userData.fingerTipLocal;
+            if (tipLocal) {
+                tipWorld = distal.localToWorld(tipLocal.clone());
+            } else {
+                const prev = joints.length > 1 ? joints[joints.length - 2]
+                    : (wrist ? worldPos(wrist) : joints[0]);
+                const dir = joints[joints.length - 1].clone().sub(prev);
+                const len = dir.length() || 0.03;
+                tipWorld = joints[joints.length - 1].clone().add(dir.normalize().multiplyScalar(len));
+            }
+            const pTip = project(tipWorld);
+
+            if (finger === 'thumb') {
+                kps[start]     = joints[0] ? project(joints[0]) : null;
+                kps[start + 1] = joints[1] ? project(joints[1]) : null;
+                if (kps[start + 1]) {
+                    kps[start + 2] = { x: (kps[start + 1].x + pTip.x) / 2, y: (kps[start + 1].y + pTip.y) / 2 };
+                }
+                kps[start + 3] = pTip;
+            } else {
+                for (let i = 0; i < 3; i++) kps[start + i] = joints[i] ? project(joints[i]) : null;
+                kps[start + 3] = pTip;
+            }
+        }
+        return kps;
+    }
+
+    // Distal phalange of each finger — the only segment whose tip matters.
+    static _DISTAL_BONES = [
+        'index_L_3', 'middle_L_3', 'ring_L_3', 'pinky_L_3', 'thumb_L_2',
+        'index_R_3', 'middle_R_3', 'ring_R_3', 'pinky_R_3', 'thumb_R_2',
+    ];
+
+    /**
+     * Populate distal fingerBone.userData.fingerTipLocal — a bone-local Vector3 from
+     * the distal joint to the fingertip — derived from the distal segment geometry.
+     * Rotation-invariant (mesh is rigidly attached to the bone), so the stored offset
+     * is a true rest-space value. Consumed by _computeHandKeypoints.
+     */
+    _computeFingerTipLocals() {
+        this._mannequinRoot?.updateMatrixWorld(true);
+        const corner = new THREE.Vector3();
+        for (const boneName of MannequinRenderer._DISTAL_BONES) {
+            const fb = this._bones.get(boneName);
+            if (!fb) continue;
+            // find the segment mesh for this distal bone
+            let mesh = null;
+            fb.traverse(o => {
+                if (!mesh && o.isMesh && o.userData.boneName === boneName &&
+                    !o.userData.isJoint && !o.userData.isHitTarget && o.geometry) {
+                    mesh = o;
+                }
+            });
+            if (!mesh) continue;
+            mesh.geometry.computeBoundingBox();
+            const bb = mesh.geometry.boundingBox;
+            if (!bb) continue;
+            let best = null, bestDist = -1;
+            for (let xi = 0; xi < 2; xi++)
+            for (let yi = 0; yi < 2; yi++)
+            for (let zi = 0; zi < 2; zi++) {
+                corner.set(xi ? bb.max.x : bb.min.x,
+                           yi ? bb.max.y : bb.min.y,
+                           zi ? bb.max.z : bb.min.z);
+                // geometry-local → world → finger-bone-local (rotation-invariant)
+                const local = fb.worldToLocal(mesh.localToWorld(corner.clone()));
+                const d = local.length();
+                if (d > bestDist) { bestDist = d; best = local; }
+            }
+            if (best) fb.userData.fingerTipLocal = best;
+        }
     }
 
     _fitDepthCamera(W, H) {
@@ -700,13 +888,13 @@ export class MannequinRenderer {
 
         const group = new THREE.Group();
         group.renderOrder = 3;
-        group.visible = (this._jointColorMode === 'openpose');
+        group.visible = (this._jointColorMode === 'openpose' || this._jointColorMode === 'all');
 
         // Unit cylinder (height=1 along Y) — scaled in _updateSkeletonLines
         const sharedGeo = new THREE.CylinderGeometry(RADIUS, RADIUS, 1, 8, 1);
 
         this._skeletonCylinders = [];
-        for (const [, , hex] of SKELETON_LIMBS) {
+        for (const [, , hex] of VIEWPORT_LIMBS) {
             const mat  = new THREE.MeshBasicMaterial({ color: hex, depthTest: false });
             const mesh = new THREE.Mesh(sharedGeo, mat);
             mesh.renderOrder = 3;
@@ -725,8 +913,8 @@ export class MannequinRenderer {
         const pB = new THREE.Vector3();
         const up = new THREE.Vector3(0, 1, 0);
 
-        for (let i = 0; i < SKELETON_LIMBS.length; i++) {
-            const [a, b] = SKELETON_LIMBS[i];
+        for (let i = 0; i < VIEWPORT_LIMBS.length; i++) {
+            const [a, b] = VIEWPORT_LIMBS[i];
             const boneA = this._bones.get(a);
             const boneB = this._bones.get(b);
             const cyl = this._skeletonCylinders[i];
@@ -740,9 +928,11 @@ export class MannequinRenderer {
             if (len < 0.001) { cyl.visible = false; continue; }
 
             cyl.visible = true;
+            // Finger limbs render thinner than body limbs.
+            const radial = i >= SKELETON_LIMBS.length ? FINGER_LIMB_RADIAL_SCALE : 1;
             // Position at midpoint, scale Y to match limb length, rotate Y→dir
             cyl.position.addVectors(pA, pB).multiplyScalar(0.5);
-            cyl.scale.set(1, len, 1);
+            cyl.scale.set(radial, len, radial);
             cyl.quaternion.setFromUnitVectors(up, dir.normalize());
         }
     }

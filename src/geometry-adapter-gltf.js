@@ -1,6 +1,6 @@
 import * as THREE from '../lib/three.module.js';
 import { GLTFLoader } from '../lib/GLTFLoader.js';
-import { BONE_NAMES } from './mannequin-model.js';
+import { BONE_NAMES, PROPORTIONS } from './mannequin-model.js';
 
 export const WORLD_HEIGHT = 2.0;
 
@@ -8,8 +8,41 @@ const JOINT_COLOR   = 0xaaaaaa;
 const SEGMENT_COLOR = 0xcccccc;
 const SELECT_COLOR  = 0x4fc3f7;
 
-const JOINT_RADIUS = 0.055; // visible sphere
+const JOINT_RADIUS = 0.044; // visible sphere (−20% tuning pass)
 const HIT_RADIUS   = 0.12;  // invisible larger sphere for easier click detection
+
+// Male hands reuse the female hand.glb, enlarged for male proportions.
+const MALE_HAND_SCALE = 1.2;
+
+// Bones whose joints must be scaled down to the bone thickness (thin parts:
+// fingers + hands). Everything else keeps the default body joint size.
+const SMALL_JOINT_BONES = new Set([
+    'index_L_1','index_L_2','index_L_3','middle_L_1','middle_L_2','middle_L_3',
+    'ring_L_1','ring_L_2','ring_L_3','pinky_L_1','pinky_L_2','pinky_L_3',
+    'thumb_L_1','thumb_L_2',
+    'index_R_1','index_R_2','index_R_3','middle_R_1','middle_R_2','middle_R_3',
+    'ring_R_1','ring_R_2','ring_R_3','pinky_R_1','pinky_R_2','pinky_R_3',
+    'thumb_R_1','thumb_R_2',
+    'hand_L','hand_R',
+]);
+
+/**
+ * Visible + hit sphere radii for a bone's joint.
+ * Body bones use the fixed defaults; fingers/hands scale to PROPORTIONS.radius
+ * so the joint balls don't swallow the thin geometry and adjacent finger hit
+ * spheres don't overlap.
+ */
+export function jointRadiiFor(gender, boneName) {
+    if (!SMALL_JOINT_BONES.has(boneName)) {
+        return { jointR: JOINT_RADIUS, hitR: HIT_RADIUS };
+    }
+    const set = (gender === 'M') ? PROPORTIONS.M : PROPORTIONS.F;
+    const r = set?.[boneName]?.radius ?? 0.011;
+    return {
+        jointR: Math.max(0.0077, r * 1.024),  // −20 % ×2 passes (visual tuning)
+        hitR:   Math.max(0.025, r * 3.2),     // hit target kept for clickability
+    };
+}
 
 // OpenPose COCO-18 joint colors — Openpose-18-keypoints_coco_color_codes_v13 (100 % brightness).
 // Bones without a direct COCO keypoint use neutral greys.
@@ -39,10 +72,11 @@ export const OPENPOSE_COLORS = {
 
 // GLB sub-meshes that attach to a bone without their own FK pivot.
 // These are children of the bone's GLB node (e.g. breasts hang on chest).
-// Sub-meshes rigidly attached to a bone (breasts, face parts, fingers, toes).
-// Kept in sync with the Python renderer's EXTRA_NODES (glb_renderer.py) so the
-// editor preview matches the API output exactly. Fingers/toes are rigid — they
-// move with the parent hand/foot bone but are not individually posable.
+// Sub-meshes rigidly attached to a bone (breasts, face parts, toes): they move
+// with the parent bone and are not individually posable.
+// NOTE: fingers used to live here too, but are now first-class posable bones
+// (see MESH_MAP). The Python renderer (glb_renderer.py) still treats fingers as
+// rigid EXTRA_NODES — that path is reconciled separately in Plan 1b.
 const EXTRA_NODES = {
     female: {
         chest: [
@@ -60,20 +94,6 @@ const EXTRA_NODES = {
             { name: 'GEO-eyelid_lower_female_primitive_stylized.R',  proportionGroup: 'head' },
             { name: 'GEO-nose_female_primitive_stylized',            proportionGroup: 'head' },
             { name: 'GEO-nose_bridge_female_primitive_stylized',     proportionGroup: 'head' },
-        ],
-        hand_L: [
-            { name: 'GEO-thumb_female_primitive_stylized.L',         proportionGroup: 'arms' },
-            { name: 'GEO-finger_index_female_primitive_stylized.L',  proportionGroup: 'arms' },
-            { name: 'GEO-finger_middle_female_primitive_stylized.L', proportionGroup: 'arms' },
-            { name: 'GEO-finger_ring_female_primitive_stylized.L',   proportionGroup: 'arms' },
-            { name: 'GEO-finger_pinky_female_primitive_stylized.L',  proportionGroup: 'arms' },
-        ],
-        hand_R: [
-            { name: 'GEO-thumb_female_primitive_stylized.R',         proportionGroup: 'arms' },
-            { name: 'GEO-finger_index_female_primitive_stylized.R',  proportionGroup: 'arms' },
-            { name: 'GEO-finger_middle_female_primitive_stylized.R', proportionGroup: 'arms' },
-            { name: 'GEO-finger_ring_female_primitive_stylized.R',   proportionGroup: 'arms' },
-            { name: 'GEO-finger_pinky_female_primitive_stylized.R',  proportionGroup: 'arms' },
         ],
         foot_L: [
             { name: 'GEO-toe_big_female_primitive_stylized.L',       proportionGroup: 'legs' },
@@ -98,20 +118,6 @@ const EXTRA_NODES = {
             { name: 'GEO-eye_male_primitive_stylized.R',             proportionGroup: 'head' },
             { name: 'GEO-nose_male_primitive_stylized',              proportionGroup: 'head' },
             { name: 'GEO-nose_bridge_male_primitive_stylized',       proportionGroup: 'head' },
-        ],
-        hand_L: [
-            { name: 'GEO-thumb_male_primitive_stylized.L',           proportionGroup: 'arms' },
-            { name: 'GEO-finger_index_male_primitive_stylized.L',    proportionGroup: 'arms' },
-            { name: 'GEO-finger_middle_male_primitive_stylized.L',   proportionGroup: 'arms' },
-            { name: 'GEO-finger_ring_male_primitive_stylized.L',     proportionGroup: 'arms' },
-            { name: 'GEO-finger_pinky_male_primitive_stylized.L',    proportionGroup: 'arms' },
-        ],
-        hand_R: [
-            { name: 'GEO-thumb_male_primitive_stylized.R',           proportionGroup: 'arms' },
-            { name: 'GEO-finger_index_male_primitive_stylized.R',    proportionGroup: 'arms' },
-            { name: 'GEO-finger_middle_male_primitive_stylized.R',   proportionGroup: 'arms' },
-            { name: 'GEO-finger_ring_male_primitive_stylized.R',     proportionGroup: 'arms' },
-            { name: 'GEO-finger_pinky_male_primitive_stylized.R',    proportionGroup: 'arms' },
         ],
         foot_L: [
             { name: 'GEO-toe_big_male_primitive_stylized.L',         proportionGroup: 'legs' },
@@ -150,6 +156,34 @@ const SEGMENT_PROPORTION_GROUP = {
     forearm_R:   'arms',
     hand_L:      'arms',
     hand_R:      'arms',
+    thumb_L_1:   'arms',
+    thumb_L_2:   'arms',
+    index_L_1:   'arms',
+    index_L_2:   'arms',
+    index_L_3:   'arms',
+    middle_L_1:  'arms',
+    middle_L_2:  'arms',
+    middle_L_3:  'arms',
+    ring_L_1:    'arms',
+    ring_L_2:    'arms',
+    ring_L_3:    'arms',
+    pinky_L_1:   'arms',
+    pinky_L_2:   'arms',
+    pinky_L_3:   'arms',
+    thumb_R_1:   'arms',
+    thumb_R_2:   'arms',
+    index_R_1:   'arms',
+    index_R_2:   'arms',
+    index_R_3:   'arms',
+    middle_R_1:  'arms',
+    middle_R_2:  'arms',
+    middle_R_3:  'arms',
+    ring_R_1:    'arms',
+    ring_R_2:    'arms',
+    ring_R_3:    'arms',
+    pinky_R_1:   'arms',
+    pinky_R_2:   'arms',
+    pinky_R_3:   'arms',
 };
 
 // Cached loaded GLBs — avoids re-fetching on gender toggle
@@ -310,6 +344,42 @@ export const MESH_MAP = {
     },
 };
 
+// Left-hand phalange bone → node name in hand.glb (segmented left hand).
+// Ordering proximal→distal: base, then .002 (middle), then .001 (tip).
+export const HAND_NODE_MAP = {
+    index_L_1:  'GEO-finger_index_female_primitive_stylized.L',
+    index_L_2:  'GEO-finger_index_female_primitive_stylized.L.002',
+    index_L_3:  'GEO-finger_index_female_primitive_stylized.L.001',
+    middle_L_1: 'GEO-finger_middle_female_primitive_stylized.L',
+    middle_L_2: 'GEO-finger_middle_female_primitive_stylized.L.002',
+    middle_L_3: 'GEO-finger_middle_female_primitive_stylized.L.001',
+    ring_L_1:   'GEO-finger_ring_female_primitive_stylized.L',
+    ring_L_2:   'GEO-finger_ring_female_primitive_stylized.L.002',
+    ring_L_3:   'GEO-finger_ring_female_primitive_stylized.L.001',
+    pinky_L_1:  'GEO-finger_pinky_female_primitive_stylized.L',
+    pinky_L_2:  'GEO-finger_pinky_female_primitive_stylized.L.002',
+    pinky_L_3:  'GEO-finger_pinky_female_primitive_stylized.L.001',
+    thumb_L_1:  'GEO-thumb_female_primitive_stylized.L',
+    thumb_L_2:  'GEO-thumb_female_primitive_stylized.L.001',
+};
+
+export const HAND_PALM_NODE = 'GEO-hand_female_primitive_stylized.L';
+
+let _handGLBCache = null;
+export async function loadHandGLB() {
+    if (_handGLBCache) return _handGLBCache;
+    const loader = new GLTFLoader();
+    const gltf = await loader.loadAsync('./assets/hand.glb');
+    gltf.scene.updateMatrixWorld(true);
+    const nodeMap = new Map();
+    gltf.scene.traverse(obj => {
+        const name = obj.userData.name || obj.name;
+        if (name) nodeMap.set(name, obj);
+    });
+    _handGLBCache = nodeMap;
+    return nodeMap;
+}
+
 async function loadGLB(gender) {
     if (gender === 'custom') return _customGLB?.nodeMap ?? new Map();
     const key = gender === 'F' ? 'female' : 'male';
@@ -389,6 +459,11 @@ export async function buildSegments(gender) {
     const key      = isCustom ? null : (gender === 'F' ? 'female' : 'male');
     const boneMap  = isCustom ? (_customGLB?.meshMap ?? {}) : MESH_MAP[key];
     const nodeMap  = await loadGLB(gender);
+    // Segmented hand (hand.glb) supplies finger phalange geometry for BOTH genders.
+    // Phalange meshes always use the FEMALE hand scale (identical hands on both bodies).
+    const handNodeMap = (key === 'female' || key === 'male') ? await loadHandGLB() : null;
+    const handScale   = (handNodeMap ? (await getCharacterScaleInfo('F')).charScale : 1)
+        * (key === 'male' ? MALE_HAND_SCALE : 1);
     const { charScale } = await getCharacterScaleInfo(gender);
     const groups = new Map();
 
@@ -396,10 +471,12 @@ export async function buildSegments(gender) {
         const group = new THREE.Group();
         group.name = boneName;
 
+        const { jointR, hitR } = jointRadiiFor(gender, boneName);
+
         // Visible joint dot — MeshBasicMaterial + depthTest:false so it renders
         // on top of body geometry and is always clickable.
         const sphere = new THREE.Mesh(
-            new THREE.SphereGeometry(JOINT_RADIUS, 12, 8),
+            new THREE.SphereGeometry(jointR, 12, 8),
             new THREE.MeshBasicMaterial({ color: JOINT_COLOR, depthTest: false })
         );
         sphere.renderOrder = 2;
@@ -411,7 +488,7 @@ export async function buildSegments(gender) {
         // Invisible hit sphere — larger radius for easier click detection.
         // material.visible=false prevents rendering but object remains raycasted.
         const hitSphere = new THREE.Mesh(
-            new THREE.SphereGeometry(HIT_RADIUS, 6, 4),
+            new THREE.SphereGeometry(hitR, 6, 4),
             new THREE.MeshBasicMaterial({ visible: false })
         );
         hitSphere.userData.boneName    = boneName;
@@ -419,8 +496,13 @@ export async function buildSegments(gender) {
         hitSphere.userData.isHitTarget = true;
         group.add(hitSphere);
 
+        // Male hand bones take the segmented hand.glb palm instead of male.glb's own
+        // hand mesh ("same hands on both genders") — skip the body-GLB segment for them.
+        const isMaleHandBone = key === 'male' && handNodeMap &&
+            (boneName === 'hand_L' || boneName === 'hand_R');
+
         // GLB mesh segment
-        const glbNodeName = boneMap[boneName];
+        const glbNodeName = isMaleHandBone ? null : boneMap[boneName];
         if (glbNodeName) {
             const glbNode = nodeMap.get(glbNodeName);
             if (glbNode) {
@@ -448,6 +530,54 @@ export async function buildSegments(gender) {
                     seg.scale.set(worldS.x * charScale, worldS.y * charScale, worldS.z * charScale);
                     seg.userData._baseScale    = { x: seg.scale.x, y: seg.scale.y, z: seg.scale.z };
                     seg.userData._basePosition = { x: 0, y: 0, z: 0 }; // at bone pivot — no offset
+                    group.add(seg);
+                }
+            }
+        }
+
+        // Phalange segment from hand.glb. The bone pivot sits at the joint (hand.glb origins
+        // are at the proximal joint), so geometry attaches at offset 0 and rotating the bone
+        // curls the segment about the joint — same convention as body. Right hand mirrors the
+        // left node across the sagittal plane (decompose handles the negative-scale reflection;
+        // DoubleSide material keeps the flipped winding visible).
+        const isRightPhalange = handNodeMap && (boneName.includes('_R_') || boneName === 'hand_R');
+        const handNodeName = handNodeMap
+            ? (HAND_NODE_MAP[boneName]
+                ?? (boneName.includes('_R_') ? HAND_NODE_MAP[boneName.replace('_R_', '_L_')] : null)
+                ?? (isMaleHandBone ? HAND_PALM_NODE : null))
+            : null;
+        if (handNodeName) {
+            const hNode = handNodeMap.get(handNodeName);
+            if (hNode) {
+                let meshNode = hNode.isMesh ? hNode : null;
+                if (!meshNode) hNode.traverse(c => { if (!meshNode && c.isMesh) meshNode = c; });
+                if (meshNode) {
+                    const seg = new THREE.Mesh(meshNode.geometry.clone(), makeToonMat(SEGMENT_COLOR));
+                    seg.userData.boneName        = boneName;
+                    seg.userData.proportionGroup = SEGMENT_PROPORTION_GROUP[boneName] ?? null;
+                    const wQ = new THREE.Quaternion();
+                    hNode.getWorldQuaternion(wQ);
+                    const wS = new THREE.Vector3();
+                    hNode.getWorldScale(wS);
+                    seg.position.set(0, 0, 0);
+                    if (isRightPhalange) {
+                        // Reflect the rest transform across scene x=0: F * (R · S), then decompose.
+                        const m = new THREE.Matrix4().compose(
+                            new THREE.Vector3(),
+                            wQ,
+                            new THREE.Vector3(wS.x * handScale, wS.y * handScale, wS.z * handScale),
+                        );
+                        m.premultiply(new THREE.Matrix4().makeScale(-1, 1, 1));
+                        const mp = new THREE.Vector3(), mq = new THREE.Quaternion(), ms = new THREE.Vector3();
+                        m.decompose(mp, mq, ms);
+                        seg.quaternion.copy(mq);
+                        seg.scale.copy(ms);
+                    } else {
+                        seg.quaternion.copy(wQ);
+                        seg.scale.set(wS.x * handScale, wS.y * handScale, wS.z * handScale);
+                    }
+                    seg.userData._baseScale    = { x: seg.scale.x, y: seg.scale.y, z: seg.scale.z };
+                    seg.userData._basePosition = { x: 0, y: 0, z: 0 };
                     group.add(seg);
                 }
             }
@@ -522,6 +652,13 @@ export async function computeBoneOffsets(gender) {
     const key      = isCustom ? null : (gender === 'F' ? 'female' : 'male');
     const boneMap  = isCustom ? (_customGLB?.meshMap ?? {}) : MESH_MAP[key];
     const nodeMap  = await loadGLB(gender);
+    // Segmented hand (hand.glb) supplies the phalange pivots for BOTH genders.
+    // hand.glb shares female.glb's coordinate space: female maps it absolutely via
+    // toScenePos; male anchors the same hand at its own wrist (wrist-relative offsets,
+    // female hand scale — both genders get identical hands).
+    const handNodeMap = (key === 'female' || key === 'male') ? await loadHandGLB() : null;
+    const handScale   = (handNodeMap ? (await getCharacterScaleInfo('F')).charScale : 1)
+        * (key === 'male' ? MALE_HAND_SCALE : 1);
     const { charScale, groundOffsetGLB, centerX, centerZ } = await getCharacterScaleInfo(gender);
     const offsets = new Map();
 
@@ -551,6 +688,37 @@ export async function computeBoneOffsets(gender) {
 
     for (const boneName of BONE_NAMES) {
         if (boneName === 'torso') continue;
+        // Phalange bones take their pivot from hand.glb (origin at the joint).
+        // Left side resolves directly; right side mirrors the left pivot across x=0.
+        if (handNodeMap && /_(L|R)_\d$/.test(boneName)) {
+            const leftName = boneName.includes('_R_') ? boneName.replace('_R_', '_L_') : boneName;
+            const hn = handNodeMap.get(HAND_NODE_MAP[leftName]);
+            if (hn) {
+                const v = new THREE.Vector3();
+                hn.getWorldPosition(v);
+                let p;
+                if (key === 'female') {
+                    // hand.glb lives in female.glb's coordinate space — map absolutely.
+                    p = toScenePos(v);
+                } else {
+                    // male: anchor at the male wrist; offsets relative to hand.glb's palm
+                    // origin (at the wrist), converted with the FEMALE hand scale so both
+                    // genders get identical hands.
+                    const palm = handNodeMap.get(HAND_PALM_NODE);
+                    const pv = new THREE.Vector3();
+                    if (palm) palm.getWorldPosition(pv);
+                    const wrist = offsets.get('hand_L'); // hand_L precedes phalanges in BONE_NAMES
+                    p = new THREE.Vector3(
+                        wrist.x + (v.x - pv.x) * handScale,
+                        wrist.y + (v.y - pv.y) * handScale,
+                        wrist.z + (v.z - pv.z) * handScale,
+                    );
+                }
+                if (boneName.includes('_R_')) p.x = -p.x;
+                offsets.set(boneName, p);
+                continue;
+            }
+        }
         const pos = getWorldPos(boneMap[boneName]);
         if (pos) {
             offsets.set(boneName, toScenePos(pos));
