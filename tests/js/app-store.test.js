@@ -148,8 +148,12 @@ describe('props state', () => {
         s.setState({ props: [{ id:'p1', source:'lib', ref:'hat_01', bone:'head', position:[0,0,0], rotation:[0,0,0,1], scale:1 }] });
         const got = s.getState();
         got.props[0].bone = 'hand_R';
+        got.props[0].position[0] = 99;   // mutate cloned sub-array
+        got.props[0].rotation[0] = 99;
         got.props.push({ id:'x' });
         expect(s.getState().props).toHaveLength(1);
         expect(s.getState().props[0].bone).toBe('head');
+        expect(s.getState().props[0].position).toEqual([0, 0, 0]);
+        expect(s.getState().props[0].rotation).toEqual([0, 0, 0, 1]);
     });
 });
