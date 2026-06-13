@@ -11,7 +11,17 @@ import {
     MirrorPoseCommand,
     RandomPoseCommand,
     SetJointColorModeCommand,
+    TransformPropCommand,
 } from './commands.js';
+
+/** Read a prop Object3D's transform into the prop-state shape (uniform scale = scale.x). */
+export function propTransformFromObject(obj) {
+    return {
+        position: [obj.position.x, obj.position.y, obj.position.z],
+        rotation: [obj.quaternion.x, obj.quaternion.y, obj.quaternion.z, obj.quaternion.w],
+        scale: obj.scale.x,
+    };
+}
 
 const UNDO_LIMIT = 20;
 
@@ -36,6 +46,10 @@ export class MannequinEditor {
         this._gender     = store?.getState().gender ?? 'F';
         this._buildChain = Promise.resolve();
 
+        // Prop selection state
+        this._selectedProp   = null;   // { id, obj } when a prop is selected
+        this._propBeforeDrag = null;   // propTransformFromObject snapshot before drag
+
         // OrbitControls
         this._orbit = new OrbitControls(renderer.camera, canvas);
         this._orbit.target.set(0, 1.0, 0);
@@ -49,7 +63,7 @@ export class MannequinEditor {
         this._transform.userData.isGizmo = true;
         renderer.scene.add(this._transform);
 
-        // Capture bone quaternion before drag starts (for undo)
+        // Capture bone/prop transform before drag starts (for undo)
         this._quatBeforeDrag = null;
         this._transform.addEventListener('mouseDown', () => {
             if (this._selectedBone) {
@@ -59,32 +73,52 @@ export class MannequinEditor {
                     this._quatBeforeDrag = { x: q.x, y: q.y, z: q.z, w: q.w };
                 }
             }
+            if (this._selectedProp?.obj) {
+                this._propBeforeDrag = propTransformFromObject(this._selectedProp.obj);
+            }
         });
 
         this._transform.addEventListener('dragging-changed', (e) => {
             this._orbit.enabled = !e.value;
-            if (!e.value && this._selectedBone && this._quatBeforeDrag) {
-                // Drag ended — commit RotateBoneCommand to history
-                const bone = this._renderer.bones.get(this._selectedBone);
-                if (bone) {
-                    const q = bone.quaternion;
-                    const nextQuat = { x: q.x, y: q.y, z: q.z, w: q.w };
-                    // Only commit if rotation actually changed
-                    const prev = this._quatBeforeDrag;
-                    if (prev.x !== nextQuat.x || prev.y !== nextQuat.y ||
-                        prev.z !== nextQuat.z || prev.w !== nextQuat.w) {
-                        // Apply to store (renderer bones already updated by Three.js)
-                        if (this._store) {
-                            // RotateBoneCommand.execute() calls store.setPoseBone() —
-                            // no need for _syncPoseToStore() here (would be a double-write).
-                            this._history.execute(
-                                new RotateBoneCommand(this._selectedBone, prev, nextQuat),
-                                this._store
-                            );
+            if (!e.value) {
+                // Bone drag ended
+                if (this._selectedBone && this._quatBeforeDrag) {
+                    const bone = this._renderer.bones.get(this._selectedBone);
+                    if (bone) {
+                        const q = bone.quaternion;
+                        const nextQuat = { x: q.x, y: q.y, z: q.z, w: q.w };
+                        // Only commit if rotation actually changed
+                        const prev = this._quatBeforeDrag;
+                        if (prev.x !== nextQuat.x || prev.y !== nextQuat.y ||
+                            prev.z !== nextQuat.z || prev.w !== nextQuat.w) {
+                            if (this._store) {
+                                this._history.execute(
+                                    new RotateBoneCommand(this._selectedBone, prev, nextQuat),
+                                    this._store
+                                );
+                            }
                         }
                     }
+                    this._quatBeforeDrag = null;
                 }
-                this._quatBeforeDrag = null;
+
+                // Prop drag ended
+                if (this._selectedProp && this._propBeforeDrag) {
+                    const next = propTransformFromObject(this._selectedProp.obj);
+                    const prev = this._propBeforeDrag;
+                    // Only commit if something actually changed
+                    const changed =
+                        prev.scale !== next.scale ||
+                        prev.position.some((v, i) => v !== next.position[i]) ||
+                        prev.rotation.some((v, i) => v !== next.rotation[i]);
+                    if (changed && this._store) {
+                        this._history.execute(
+                            new TransformPropCommand(this._selectedProp.id, prev, next),
+                            this._store
+                        );
+                    }
+                    this._propBeforeDrag = null;
+                }
             }
         });
         this._transform.addEventListener('change', () => renderer.markDirty());
@@ -308,14 +342,32 @@ export class MannequinEditor {
         const hits = this._raycaster.intersectObjects(pickables, false);
 
         if (hits.length > 0) {
-            const hit      = hits[0].object;
-            const boneName = hit.userData.boneName;
-            let sphere = null;
-            const boneGroup = hit.parent;
-            if (boneGroup) {
-                sphere = boneGroup.children.find(c => c.userData.isJoint && !c.userData.isHitTarget) ?? null;
+            const hit = hits[0].object;
+
+            // Check if the hit object belongs to a prop — walk up to find isProp ancestor
+            let propObj = null;
+            let node = hit;
+            while (node) {
+                if (node.userData?.isProp) { propObj = node; break; }
+                node = node.parent ?? null;
             }
-            this._selectBone(boneName, sphere);
+
+            if (propObj) {
+                // Prop hit — deselect bone, select prop
+                this._deselect();
+                this._selectedProp = { id: propObj.userData.propId, obj: propObj };
+                this._transform.attach(propObj);
+                this._propBeforeDrag = propTransformFromObject(propObj);
+            } else {
+                // Bone hit (existing path)
+                const boneName = hit.userData.boneName;
+                let sphere = null;
+                const boneGroup = hit.parent;
+                if (boneGroup) {
+                    sphere = boneGroup.children.find(c => c.userData.isJoint && !c.userData.isHitTarget) ?? null;
+                }
+                this._selectBone(boneName, sphere);
+            }
         } else {
             this._deselect();
         }
@@ -338,8 +390,18 @@ export class MannequinEditor {
             this._selectedSphere.material.color.setHex(origColor);
             this._selectedSphere = null;
         }
-        this._selectedBone = null;
+        this._selectedBone   = null;
+        this._selectedProp   = null;
+        this._propBeforeDrag = null;
         this._transform.detach();
+    }
+
+    /**
+     * Set the gizmo transform mode — useful for prop manipulation.
+     * @param {'translate'|'rotate'|'scale'} mode
+     */
+    setGizmoMode(mode) {
+        this._transform.setMode(mode);
     }
 
     _onKeyDown(e) {

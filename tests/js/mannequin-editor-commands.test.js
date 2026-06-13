@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { propTransformFromObject } from '../../static/src/mannequin-editor.js';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -309,6 +310,19 @@ describe('applyFingerPreset', () => {
         editor.applyFingerPreset(buildPresetPose('Pięść'));
         editor.undo();
         expect(JSON.stringify(store.getState().pose)).toBe(before);
+    });
+});
+
+// ── propTransformFromObject ───────────────────────────────────────────────────
+
+describe('propTransformFromObject', () => {
+    it('reads position, rotation quaternion, and uniform scale from an Object3D-like', () => {
+        const obj = { position:{x:0.1,y:0.2,z:0.3}, quaternion:{x:0,y:0,z:0,w:1}, scale:{x:2,y:2,z:2} };
+        expect(propTransformFromObject(obj)).toEqual({ position:[0.1,0.2,0.3], rotation:[0,0,0,1], scale:2 });
+    });
+    it('uses scale.x as the uniform scale', () => {
+        const obj = { position:{x:0,y:0,z:0}, quaternion:{x:0,y:0,z:0,w:1}, scale:{x:1.5,y:1.5,z:1.5} };
+        expect(propTransformFromObject(obj).scale).toBe(1.5);
     });
 });
 
