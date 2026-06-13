@@ -11,6 +11,10 @@ import { HandsPanel } from './panels/hands-panel.js';
 import { AppStore, defaultState } from './app-store.js';
 import { CommandHistory, SetBgImageCommand } from './commands.js';
 import { parseCustomGLB, setCustomGLB, clearCustomGLB } from './geometry-adapter-gltf.js';
+import { PropsPanel } from './panels/props-panel.js';
+import { PropsController } from './props-controller.js';
+import { AddPropCommand, RemovePropCommand } from './commands.js';
+import { libraryEntry } from './props.js';
 
 const params = new URLSearchParams(location.search);
 const mode   = params.get('mode') ?? 'standalone';
@@ -38,6 +42,45 @@ overlaysPanel.mount(document.body);
 
 const handsPanel = new HandsPanel(editor);
 handsPanel.mount(document.body);
+
+// ── Props panel ────────────────────────────────────────────────────────────────
+const propsController = new PropsController(renderer);
+const objectsPanelApi = {
+    addLibraryProp(id) {
+        const entry = libraryEntry(id);
+        if (!entry) return;
+        const propState = { id: 'p-' + Date.now(), source: 'lib', ref: id,
+            bone: entry.defaultBone, position: [0,0,0], rotation: [0,0,0,1], scale: 1 };
+        history.execute(new AddPropCommand(propState), store);
+        propsController.realize(propState).then(() => objectsPanel.refresh());
+    },
+    addUpload(filename, buf) {
+        const propState = { id: 'p-' + Date.now(), source: 'upload', ref: filename,
+            bone: 'hand_R', position: [0,0,0], rotation: [0,0,0,1], scale: 1 };
+        history.execute(new AddPropCommand(propState), store);
+        propsController.addUpload(propState, buf).then(() => objectsPanel.refresh());
+    },
+    removeProp(id) {
+        const prop = store.getState().props?.find(p => p.id === id);
+        if (!prop) return;
+        history.execute(new RemovePropCommand(prop), store);
+        propsController.remove(id);
+        objectsPanel.refresh();
+    },
+    selectProp(_id) {
+        // TODO gizmo select wired in PR8
+    },
+    listProps() {
+        const missing = propsController.missingProps();
+        return (store.getState().props ?? []).map(p => ({
+            id: p.id, ref: p.ref, bone: p.bone,
+            missing: missing.some(m => m.id === p.id),
+        }));
+    },
+};
+const objectsPanel = new PropsPanel(objectsPanelApi);
+objectsPanel.mount(document.body);
+
 const btnOverlays = document.getElementById('btn-overlays');
 // (panel toggles wired together below via the side-panel coordinator)
 
@@ -169,9 +212,10 @@ const btnProps = document.getElementById('btn-props');
 // ── Docked side panels — only one open at a time (Poses ⟷ Model) ─────────────────
 // Floating panels (Overlays, Bust) stay independent and are wired separately below.
 const SIDE_PANELS = [
-    { panel: poseLib,    btn: document.getElementById('btn-poses') },
-    { panel: propsPanel, btn: btnProps },
-    { panel: handsPanel, btn: document.getElementById('btn-hands') },
+    { panel: poseLib,      btn: document.getElementById('btn-poses') },
+    { panel: propsPanel,   btn: btnProps },
+    { panel: handsPanel,   btn: document.getElementById('btn-hands') },
+    { panel: objectsPanel, btn: document.getElementById('btn-objects') },
 ];
 function toggleSidePanel(target) {
     const willOpen = !target.panel.isVisible();
