@@ -82,10 +82,29 @@ vi.mock('../../static/src/finger-presets.js', () => ({
                    'thumb_R','index_R','middle_R','ring_R','pinky_R'],
 }));
 
-vi.mock('../../static/src/mannequin-renderer.js', () => ({
-    BUST_DEFAULTS: { loc_z_base:0, loc_z:0.65, glob_z:0.2, loc_x:0.18, loc_y:0.3, glob_y_base:0.0, glob_y:0.0,
-                     rot_x:0.6, rot_z:-0.5, rot_y:0.5, grot_x:0.0, grot_y:0.0, grot_z:0.0, scale_x:1.0 },
-}));
+vi.mock('../../static/src/mannequin-renderer.js', () => {
+    function makeHandle(chainId) {
+        return { visible: false, userData: { isIKHandle: true, chainId }, getWorldPosition: v => v };
+    }
+    const handleMap = new Map([
+        ['arm_L', makeHandle('arm_L')],
+        ['arm_R', makeHandle('arm_R')],
+        ['leg_L', makeHandle('leg_L')],
+        ['leg_R', makeHandle('leg_R')],
+    ]);
+    return {
+        BUST_DEFAULTS: { loc_z_base:0, loc_z:0.65, glob_z:0.2, loc_x:0.18, loc_y:0.3, glob_y_base:0.0, glob_y:0.0,
+                         rot_x:0.6, rot_z:-0.5, rot_y:0.5, grot_x:0.0, grot_y:0.0, grot_z:0.0, scale_x:1.0 },
+        createIKHandles: vi.fn(() => handleMap),
+        setIKHandlesVisible: vi.fn((handles, visible) => { for (const h of handles.values()) h.visible = visible; }),
+        syncIKHandles: vi.fn(),
+    };
+});
+
+vi.mock('../../static/src/ik-controller.js', () => {
+    function IKController() { this.solve = vi.fn(); }
+    return { IKController };
+});
 
 const { AppStore, defaultState } = await import('../../static/src/app-store.js');
 
@@ -323,6 +342,21 @@ describe('propTransformFromObject', () => {
     it('uses scale.x as the uniform scale', () => {
         const obj = { position:{x:0,y:0,z:0}, quaternion:{x:0,y:0,z:0,w:1}, scale:{x:1.5,y:1.5,z:1.5} };
         expect(propTransformFromObject(obj).scale).toBe(1.5);
+    });
+});
+
+// ── IK mode ───────────────────────────────────────────────────────────────────
+
+describe('IK mode', () => {
+    it('setIKMode toggles flag and handle visibility', () => {
+        const { editor } = mkEditor();
+        expect(editor._ikMode).toBe(false);
+        editor.setIKMode(true);
+        expect(editor._ikMode).toBe(true);
+        for (const h of editor._ikHandles.values()) expect(h.visible).toBe(true);
+        editor.setIKMode(false);
+        expect(editor._ikMode).toBe(false);
+        for (const h of editor._ikHandles.values()) expect(h.visible).toBe(false);
     });
 });
 

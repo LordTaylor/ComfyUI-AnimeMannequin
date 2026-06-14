@@ -12,7 +12,10 @@ import {
     RandomPoseCommand,
     SetJointColorModeCommand,
     TransformPropCommand,
+    IKPoseCommand,
 } from './commands.js';
+import { IKController } from './ik-controller.js';
+import { createIKHandles, setIKHandlesVisible, syncIKHandles } from './mannequin-renderer.js';
 
 /** Read a prop Object3D's transform into the prop-state shape (uniform scale = scale.x). */
 export function propTransformFromObject(obj) {
@@ -63,6 +66,13 @@ export class MannequinEditor {
         this._transform.userData.isGizmo = true;
         renderer.scene.add(this._transform);
 
+        // ── IK mode ───────────────────────────────────────────────────────────────
+        this._ikMode        = false;
+        this._ikController  = new IKController({ bones: renderer.bones });
+        this._ikHandles     = createIKHandles(renderer.scene);
+        this._ikActiveChain = null;          // chainId currently driven by the gizmo
+        this._poseBeforeIK  = null;          // full pose snapshot for undo
+
         // Capture bone/prop transform before drag starts (for undo)
         this._quatBeforeDrag = null;
         this._transform.addEventListener('mouseDown', () => {
@@ -75,6 +85,10 @@ export class MannequinEditor {
             }
             if (this._selectedProp?.obj) {
                 this._propBeforeDrag = propTransformFromObject(this._selectedProp.obj);
+            }
+            if (this._ikActiveChain) {
+                const pose = this._store?.getState().pose ?? {};
+                this._poseBeforeIK = { ...pose };
             }
         });
 
@@ -102,6 +116,17 @@ export class MannequinEditor {
                     this._quatBeforeDrag = null;
                 }
 
+                // IK drag ended
+                if (this._ikActiveChain && this._poseBeforeIK && this._store) {
+                    const nextPose = this._store.getState().pose;
+                    const prev = this._poseBeforeIK;
+                    const changed = JSON.stringify(prev) !== JSON.stringify(nextPose);
+                    if (changed) {
+                        this._history.execute(new IKPoseCommand(prev, nextPose), this._store);
+                    }
+                    this._poseBeforeIK = null;
+                }
+
                 // Prop drag ended
                 if (this._selectedProp && this._propBeforeDrag) {
                     const next = propTransformFromObject(this._selectedProp.obj);
@@ -122,6 +147,16 @@ export class MannequinEditor {
             }
         });
         this._transform.addEventListener('change', () => renderer.markDirty());
+
+        this._transform.addEventListener('objectChange', () => {
+            if (!this._ikActiveChain) return;
+            const handle = this._ikHandles.get(this._ikActiveChain);
+            if (!handle) return;
+            const target = handle.getWorldPosition(new THREE.Vector3());
+            this._ikController.solve(this._ikActiveChain, target);
+            this._syncPoseToStore();
+            this._renderer.markDirty();
+        });
 
         // Pointer events
         this._boundClick   = this._onCanvasClick.bind(this);
@@ -334,6 +369,22 @@ export class MannequinEditor {
         this._mouse.y = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
 
         this._raycaster.setFromCamera(this._mouse, this._renderer.camera);
+
+        if (this._ikMode) {
+            const handleMeshes = [...this._ikHandles.values()];
+            const ikHits = this._raycaster.intersectObjects(handleMeshes, false);
+            if (ikHits.length > 0) {
+                const handle = ikHits[0].object;
+                this._deselect();
+                this._ikActiveChain = handle.userData.chainId;
+                this._transform.setMode('translate');
+                this._transform.setSpace('world');
+                this._transform.attach(handle);
+                this._renderer.markDirty();
+                return;
+            }
+        }
+
         const pickables = [];
         this._renderer.scene.traverse(obj => {
             if (obj.userData.isJoint || (obj.isMesh && obj.userData.boneName && !obj.userData.isJoint)) {
@@ -411,12 +462,31 @@ export class MannequinEditor {
         this._transform.setMode(mode);
     }
 
+    setIKMode(on) {
+        this._ikMode = !!on;
+        if (!this._ikMode) {
+            if (this._ikActiveChain) { this._transform.detach(); this._ikActiveChain = null; }
+        } else {
+            this._deselect();
+            syncIKHandles(this._ikHandles, this._renderer.bones);
+        }
+        setIKHandlesVisible(this._ikHandles, this._ikMode);
+        this._renderer.markDirty();
+    }
+
+    get ikMode() { return this._ikMode; }
+
     _onKeyDown(e) {
         if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); this.undo(); }
         if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Z') { e.preventDefault(); this.redo(); }
     }
 
-    update() { this._orbit.update(); }
+    update() {
+        this._orbit.update();
+        if (this._ikMode && !this._ikActiveChain) {
+            syncIKHandles(this._ikHandles, this._renderer.bones);
+        }
+    }
 
     dispose() {
         this._canvas.removeEventListener('click',   this._boundClick);
