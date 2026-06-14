@@ -30,6 +30,8 @@ function anyPerp(n) {
 export function solveTwoBone({ root, target, lenA, lenB, pole }) {
     const axis = sub(target, root);
     const d0   = len(axis);
+    // Degenerate case (target coincides with root): pick a stable default axis
+    // pointing "down" — a sensible neutral for a limb that has nowhere to aim.
     const n    = d0 < EPS ? [0, -1, 0] : scale(axis, 1 / d0);
 
     const dMin = Math.abs(lenA - lenB) + EPS;
@@ -42,9 +44,10 @@ export function solveTwoBone({ root, target, lenA, lenB, pole }) {
     const cosA  = clamp((lenA * lenA + d * d - lenB * lenB) / (2 * lenA * d), -1, 1);
     const angle = Math.acos(cosA);
 
-    let p = sub(pole, scale(n, dot(pole, n)));
-    p = len(p) < EPS ? anyPerp(n) : normalize(p);
+    // Bend direction: component of the pole vector perpendicular to the axis.
+    let polePerp = sub(pole, scale(n, dot(pole, n)));
+    polePerp = len(polePerp) < EPS ? anyPerp(n) : normalize(polePerp);
 
-    const mid = add(root, add(scale(n, lenA * Math.cos(angle)), scale(p, lenA * Math.sin(angle))));
+    const mid = add(root, add(scale(n, lenA * Math.cos(angle)), scale(polePerp, lenA * Math.sin(angle))));
     return { mid, endClamped, reachable };
 }
