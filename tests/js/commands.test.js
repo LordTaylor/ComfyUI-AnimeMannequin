@@ -297,3 +297,31 @@ describe('prop commands', () => {
         c.undo(s);    expect(s.getState().props[0].scale).toBe(1); expect(s.getState().props[0].bone).toBe('head');
     });
 });
+
+import { IKPoseCommand } from '../../static/src/commands.js';
+
+describe('IKPoseCommand', () => {
+    function makeStore(initialPose) {
+        let pose = { ...initialPose };
+        return {
+            setPose: (p) => { pose = { ...p }; },
+            getPose: () => pose,
+        };
+    }
+
+    it('execute sets next pose, undo restores prev pose', () => {
+        const prev = { upper_arm_L: { x: 0, y: 0, z: 0, w: 1 } };
+        const next = { upper_arm_L: { x: 0, y: 0, z: 0.1, w: 0.99 }, forearm_L: { x: 0.2, y: 0, z: 0, w: 0.97 } };
+        const store = makeStore(prev);
+        const cmd = new IKPoseCommand(prev, next);
+        cmd.execute(store);
+        expect(store.getPose()).toEqual(next);
+        cmd.undo(store);
+        expect(store.getPose()).toEqual(prev);
+    });
+
+    it('description names IK', () => {
+        const cmd = new IKPoseCommand({}, {});
+        expect(cmd.description).toBe('IK pose');
+    });
+});
