@@ -262,6 +262,14 @@ for (const e of SIDE_PANELS) {
     if (e.btn) e.btn.addEventListener('click', () => toggleSidePanel(e));
 }
 
+// ── IK toggle ────────────────────────────────────────────────────────────────
+const btnIK = document.getElementById('btn-ik');
+btnIK?.addEventListener('click', () => {
+    const next = !editor.ikMode;
+    editor.setIKMode(next);
+    btnIK.classList.toggle('active', next);
+});
+
 // ── Floating panels — independent toggles ───────────────────────────────────────
 // All wiring below is null-safe: a missing toolbar button (e.g. an embedded host
 // serving a cached older index.html) must NEVER crash init — the 3-D editor and the
