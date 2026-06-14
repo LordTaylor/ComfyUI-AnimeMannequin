@@ -220,3 +220,19 @@ export class TransformPropCommand extends Command {
     undo(store)    { store.updateProp(this._id, this._prev); }
     get description() { return `Transform prop ${this._id}`; }
 }
+
+/**
+ * IK solve result — snapshots the full pose before/after a drag so the whole
+ * change (two limb bones) undoes/redoes as one step. Mirrors RandomPoseCommand.
+ */
+export class IKPoseCommand extends Command {
+    constructor(prevPose, nextPose) {
+        super();
+        this._prev = { ...prevPose };
+        this._next = { ...nextPose };
+    }
+
+    execute(store) { store.setPose(this._next); }
+    undo(store)    { store.setPose(this._prev); }
+    get description() { return 'IK pose'; }
+}
