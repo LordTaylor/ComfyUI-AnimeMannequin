@@ -184,6 +184,7 @@ export class MannequinEditor {
     }
 
     async setGender(gender) {
+        this._deselect();
         const currentState = this._store?.getState();
         const prevGender   = currentState?.gender ?? this._gender;
         const prevPose     = currentState?.pose   ?? {};
@@ -470,6 +471,9 @@ export class MannequinEditor {
         this._ikMode = !!on;
         if (!this._ikMode) {
             if (this._ikActiveChain) { this._transform.detach(); this._ikActiveChain = null; }
+            this._poseBeforeIK = null;
+            this._transform.setMode('rotate');
+            this._transform.setSpace('local');
         } else {
             this._deselect();
             syncIKHandles(this._ikHandles, this._renderer.bones);

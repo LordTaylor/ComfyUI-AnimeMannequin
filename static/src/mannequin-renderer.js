@@ -638,9 +638,9 @@ export class MannequinRenderer {
         this._scene.traverse(o => { if (o.userData.isJoint && !o.userData.isHitTarget && o.visible) jointMeshes.push(o); });
         const setJointsVisible = v => jointMeshes.forEach(j => j.visible = v);
 
-        // Hide editor gizmos (TransformControls rotation rings, etc.) — must not appear in output
+        // Hide editor gizmos (TransformControls rotation rings, etc.) and IK target handles — must not appear in output
         const gizmos = [];
-        this._scene.traverse(o => { if (o.userData.isGizmo && o.visible) { gizmos.push(o); o.visible = false; } });
+        this._scene.traverse(o => { if ((o.userData.isGizmo || o.userData.isIKHandle) && o.visible) { gizmos.push(o); o.visible = false; } });
 
         this._grid.visible = false;
         this._renderer.setSize(W, H);
