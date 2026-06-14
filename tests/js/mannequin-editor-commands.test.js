@@ -360,6 +360,32 @@ describe('IK mode', () => {
     });
 });
 
+// ── IK drag-state cleared on deselect ────────────────────────────────────────
+
+describe('_deselect IK state', () => {
+    it('clears _ikActiveChain and _poseBeforeIK', () => {
+        const { editor } = mkEditor();
+        editor._ikActiveChain = 'arm_L';
+        editor._poseBeforeIK  = { upper_arm_L: { x:0, y:0, z:0, w:1 } };
+        editor._deselect();
+        expect(editor._ikActiveChain).toBeNull();
+        expect(editor._poseBeforeIK).toBeNull();
+    });
+});
+
+// ── _selectBone resets gizmo to rotate/local ──────────────────────────────────
+
+describe('_selectBone gizmo reset', () => {
+    it('resets gizmo to rotate/local when selecting a bone', () => {
+        const { editor } = mkEditor(['upper_arm_L']);
+        const modeSpy  = vi.spyOn(editor._transform, 'setMode');
+        const spaceSpy = vi.spyOn(editor._transform, 'setSpace');
+        editor._selectBone('upper_arm_L', null);
+        expect(modeSpy).toHaveBeenCalledWith('rotate');
+        expect(spaceSpy).toHaveBeenCalledWith('local');
+    });
+});
+
 // ── MIRROR_PAIRS fingers ──────────────────────────────────────────────────────
 
 describe('MIRROR_PAIRS fingers', () => {

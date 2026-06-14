@@ -437,6 +437,8 @@ export class MannequinEditor {
         this._selectedBone   = boneName;
         this._selectedSphere = sphereMesh ?? null;
         if (sphereMesh) sphereMesh.material.color.setHex(SELECT_COLOR);
+        this._transform.setMode('rotate');
+        this._transform.setSpace('local');
         const boneObj = this._renderer.bones.get(boneName);
         if (boneObj) this._transform.attach(boneObj);
         this._renderer.markDirty();
@@ -451,6 +453,8 @@ export class MannequinEditor {
         this._selectedBone   = null;
         this._selectedProp   = null;
         this._propBeforeDrag = null;
+        this._ikActiveChain  = null;
+        this._poseBeforeIK   = null;
         this._transform.detach();
     }
 
