@@ -118,6 +118,46 @@ function sobelCanny(sourceCanvas) {
     return tmp.toDataURL('image/png');
 }
 
+// ── IK target handles ───────────────────────────────────────────────────────
+// Map chainId → effector bone name (kept local to avoid importing ik-controller
+// into the renderer; must stay in sync with IK_CHAINS in ik-controller.js).
+const IK_HANDLE_EFFECTORS = {
+    arm_L: 'hand_L', arm_R: 'hand_R', leg_L: 'foot_L', leg_R: 'foot_R',
+};
+const IK_HANDLE_RADIUS = 0.03;
+const IK_HANDLE_COLOR  = 0x22d3ee; // cyan
+
+export function createIKHandles(scene) {
+    const handles = new Map();
+    for (const chainId of Object.keys(IK_HANDLE_EFFECTORS)) {
+        const geo = new THREE.SphereGeometry(IK_HANDLE_RADIUS, 16, 12);
+        const mat = new THREE.MeshBasicMaterial({ color: IK_HANDLE_COLOR, depthTest: false, transparent: true, opacity: 0.85 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.renderOrder = 999;
+        mesh.visible = false;
+        mesh.userData.isIKHandle = true;
+        mesh.userData.chainId = chainId;
+        scene.add(mesh);
+        handles.set(chainId, mesh);
+    }
+    return handles;
+}
+
+export function setIKHandlesVisible(handles, visible) {
+    for (const h of handles.values()) h.visible = !!visible;
+}
+
+/** Position each handle at its chain's effector world position. */
+export function syncIKHandles(handles, bones) {
+    const tmp = new THREE.Vector3();
+    for (const [chainId, mesh] of handles) {
+        const bone = bones.get(IK_HANDLE_EFFECTORS[chainId]);
+        if (!bone) continue;
+        bone.getWorldPosition(tmp);
+        mesh.position.copy(tmp);
+    }
+}
+
 export class MannequinRenderer {
     /**
      * @param {HTMLCanvasElement} canvas
