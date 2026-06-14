@@ -39,7 +39,7 @@ describe('IKController.solve', () => {
     });
 
     it('leaves the end bone local rotation untouched', () => {
-        const { scene, bones, hand } = makeArmChain();
+        const { bones, hand } = makeArmChain();
         hand.quaternion.set(0.1, 0.2, 0.0, 0.974);
         const before = hand.quaternion.clone();
         const ctrl = new IKController({ bones });
@@ -61,5 +61,28 @@ describe('IKController.solve', () => {
         expect(wrist.distanceTo(shoulder)).toBeCloseTo(2, 1);
         expect(wrist.x).toBeCloseTo(0, 1);
         expect(wrist.z).toBeCloseTo(0, 1);
+    });
+});
+
+describe('IKController.effectorWorld / chain', () => {
+    it('chain() returns the chain def or null', () => {
+        const ctrl = new IKController({ bones: new Map() });
+        expect(ctrl.chain('arm_L').end).toBe('hand_L');
+        expect(ctrl.chain('nope')).toBeNull();
+    });
+
+    it('effectorWorld returns the effector bone world position', () => {
+        const { bones } = makeArmChain();
+        const ctrl = new IKController({ bones });
+        const out = ctrl.effectorWorld('arm_L');
+        // wrist = shoulder(0,2,0) + elbow(0,-1,0) + hand(0,-1,0), with the 0.3 x-bend applied
+        expect(out.y).toBeLessThan(2);   // below the shoulder
+        expect(Number.isFinite(out.x)).toBe(true);
+    });
+
+    it('effectorWorld returns origin for unknown chain', () => {
+        const ctrl = new IKController({ bones: new Map() });
+        const out = ctrl.effectorWorld('nope');
+        expect([out.x, out.y, out.z]).toEqual([0, 0, 0]);
     });
 });

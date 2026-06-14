@@ -57,12 +57,13 @@ export class IKController {
         const midTarget = new THREE.Vector3(res.mid[0], res.mid[1], res.mid[2]);
         const endTarget = new THREE.Vector3(res.endClamped[0], res.endClamped[1], res.endClamped[2]);
 
+        const midW1 = new THREE.Vector3();
         for (let i = 0; i < 2; i++) {
             // 1) Rotate root bone so its child (mid) moves toward midTarget.
             this._aimBoneChildTo(rootB, midB, rootW, midTarget);
 
             rootB.updateWorldMatrix(true, true);
-            const midW1 = midB.getWorldPosition(new THREE.Vector3());
+            midB.getWorldPosition(midW1);
 
             // 2) Rotate mid bone so its child (end) moves toward endTarget.
             this._aimBoneChildTo(midB, endB, midW1, endTarget);
