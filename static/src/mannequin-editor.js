@@ -16,7 +16,8 @@ import {
     PosePresetCommand,
 } from './commands.js';
 import { presetById, presetToPose } from './pose-presets.js';
-import { IKController } from './ik-controller.js';
+import { IKController, IK_CHAINS } from './ik-controller.js';
+import { INTENSITY, pickBasePreset, jitterPose, randomOffsetVec } from './smart-pose.js';
 import { createIKHandles, setIKHandlesVisible, syncIKHandles } from './mannequin-renderer.js';
 
 /** Read a prop Object3D's transform into the prop-state shape (uniform scale = scale.x). */
@@ -333,33 +334,48 @@ export class MannequinEditor {
         this._renderer.markDirty();
     }
 
-    generateRandomPose(mode = 'safe') {
-        const DEG    = Math.PI / 180;
-        const rnd    = (lo, hi) => (lo + Math.random() * (hi - lo)) * DEG;
-        const LIMITS = mode === 'wild'
-            ? MannequinEditor.RANDOM_LIMITS_WILD
-            : MannequinEditor.RANDOM_LIMITS_SAFE;
+    generateRandomPose(mode = 'safe', rng = Math.random) {
+        const intensity = INTENSITY[mode] ?? INTENSITY.safe;
+        const prevPose  = this._store?.getState().pose ?? {};
 
-        const prevPose = this._store?.getState().pose ?? {};
-        const euler    = new THREE.Euler();
-        const quat     = new THREE.Quaternion();
-        const nextPose = { ...prevPose };
+        // If an IK handle is mid-drag, clear it so handles re-sync to the new pose.
+        if (this._ikActiveChain) this._deselect();
 
-        for (const [boneName, limits] of Object.entries(LIMITS)) {
-            if (!limits) continue;
-            const bone = this._renderer.bones.get(boneName);
-            if (!bone) continue;
-            const [x0,x1,y0,y1,z0,z1] = limits;
-            euler.set(rnd(x0,x1), rnd(y0,y1), rnd(z0,z1), 'XYZ');
-            quat.setFromEuler(euler);
-            bone.quaternion.copy(quat);
-            nextPose[boneName] = { x: quat.x, y: quat.y, z: quat.z, w: quat.w };
+        // 1) base preset → 2) jitter torso
+        const preset   = pickBasePreset(rng);
+        const base     = presetToPose(preset);
+        const jittered = jitterPose(base, rng, intensity.jitterDeg);
+
+        // 3) apply base+jitter to renderer bones
+        for (const [name, q] of Object.entries(jittered)) {
+            const bone = this._renderer.bones.get(name);
+            if (bone) bone.quaternion.set(q.x, q.y, q.z, q.w);
+        }
+
+        // 4) IK-settle each limb to a randomly offset reachable target
+        for (const chain of IK_CHAINS) {
+            const rootB = this._renderer.bones.get(chain.root);
+            const midB  = this._renderer.bones.get(chain.mid);
+            const endB  = this._renderer.bones.get(chain.end);
+            if (!rootB || !midB || !endB) continue;
+            const rootW = rootB.getWorldPosition(new THREE.Vector3());
+            const midW  = midB.getWorldPosition(new THREE.Vector3());
+            const endW  = endB.getWorldPosition(new THREE.Vector3());
+            const limbLen = rootW.distanceTo(midW) + midW.distanceTo(endW);
+            const target  = endW.clone().add(randomOffsetVec(rng, intensity.reachFrac * limbLen));
+            this._ikController.solve(chain.id, target);
+        }
+
+        // 5) read the final pose back from the bones
+        const nextPose = {};
+        for (const [name, bone] of this._renderer.bones) {
+            const q = bone.quaternion;
+            nextPose[name] = { x: q.x, y: q.y, z: q.z, w: q.w };
         }
 
         if (this._store) {
             this._history.execute(new RandomPoseCommand(prevPose, nextPose), this._store);
         }
-
         this._renderer.markDirty();
         return this._renderer.getSceneData(this._gender);
     }
@@ -528,51 +544,4 @@ export class MannequinEditor {
         this._transform.dispose();
     }
 
-    // ── Pose limits ────────────────────────────────────────────────────────────
-
-    static RANDOM_LIMITS_SAFE = {
-        torso:       null,
-        spine:       [ -8,  8, -12, 12,  -6,  6],
-        chest:       [ -8,  8,  -8,  8,  -5,  5],
-        neck:        [-15, 15, -20, 20, -10, 10],
-        head:        [-12, 12, -20, 20,  -8,  8],
-        shoulder_L:  [-20, 40, -18, 18, -50, 25],
-        upper_arm_L: [-55, 30, -35, 35, -18, 18],
-        forearm_L:   [  0, 80,  -4,  4,  -4,  4],
-        hand_L:      [-18, 18, -18, 18, -10, 10],
-        shoulder_R:  [-20, 40, -18, 18, -25, 50],
-        upper_arm_R: [-55, 30, -35, 35, -18, 18],
-        forearm_R:   [  0, 80,  -4,  4,  -4,  4],
-        hand_R:      [-18, 18, -18, 18, -10, 10],
-        pelvis:      [ -6,  6,  -6,  6,  -4,  4],
-        thigh_L:     [-35, 20, -18, 18, -20, 10],
-        shin_L:      [-70,  0,  -4,  4,  -4,  4],
-        foot_L:      [-18, 18,  -8,  8,  -8,  8],
-        thigh_R:     [-35, 20, -18, 18, -10, 20],
-        shin_R:      [-70,  0,  -4,  4,  -4,  4],
-        foot_R:      [-18, 18,  -8,  8,  -8,  8],
-    };
-
-    static RANDOM_LIMITS_WILD = {
-        torso:       null,
-        spine:       [-45, 45, -45, 45, -30, 30],
-        chest:       [-35, 35, -35, 35, -25, 25],
-        neck:        [-55, 55, -70, 70, -35, 35],
-        head:        [-40, 40, -65, 65, -30, 30],
-        shoulder_L:  [-60,130, -60, 60, -120, 90],
-        upper_arm_L: [-130, 90, -90, 90, -60, 60],
-        forearm_L:   [  0, 145,  -6,  6,  -6,  6],
-        hand_L:      [-60, 60, -60, 60, -40, 40],
-        shoulder_R:  [-60,130, -60, 60,  -90,120],
-        upper_arm_R: [-130, 90, -90, 90, -60, 60],
-        forearm_R:   [  0, 145,  -6,  6,  -6,  6],
-        hand_R:      [-60, 60, -60, 60, -40, 40],
-        pelvis:      [-30, 30, -30, 30, -20, 20],
-        thigh_L:     [-100, 75, -55, 55, -75, 40],
-        shin_L:      [-140,   0,  -6,  6,  -6,  6],
-        foot_L:      [-60, 60, -30, 30, -30, 30],
-        thigh_R:     [-100, 75, -55, 55, -40, 75],
-        shin_R:      [-140,   0,  -6,  6,  -6,  6],
-        foot_R:      [-60, 60, -30, 30, -30, 30],
-    };
 }

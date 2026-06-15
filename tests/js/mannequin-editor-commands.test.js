@@ -103,8 +103,19 @@ vi.mock('../../static/src/mannequin-renderer.js', () => {
 
 vi.mock('../../static/src/ik-controller.js', () => {
     function IKController() { this.solve = vi.fn(); }
-    return { IKController };
+    const IK_CHAINS = [];
+    return { IKController, IK_CHAINS };
 });
+
+vi.mock('../../static/src/smart-pose.js', () => ({
+    ELIGIBLE_PRESET_IDS: ['t_pose'],
+    TORSO_BONES: ['spine', 'chest', 'neck', 'head', 'pelvis', 'shoulder_L', 'shoulder_R'],
+    INTENSITY: { safe: { jitterDeg: 8, reachFrac: 0.12 }, wild: { jitterDeg: 22, reachFrac: 0.30 } },
+    pickBasePreset: () => ({ id: 't_pose', name: 'T', group: 'basic', angles: {} }),
+    jitterPose: (pose) => ({ ...pose, head: { x: 0, y: 0, z: 0.2, w: 0.9797958971 } }),
+    randomOffsetVec: () => ({ clone() { return this; }, add() { return this; }, x: 0, y: 0, z: 0,
+                             length() { return 0; }, multiplyScalar() { return this; } }),
+}));
 
 vi.mock('../../static/src/pose-presets.js', () => {
     const IDENTITY = { x: 0, y: 0, z: 0, w: 1 };
@@ -237,28 +248,33 @@ describe('mirrorPose', () => {
 // ── generateRandomPose ────────────────────────────────────────────────────────
 
 describe('generateRandomPose', () => {
-    it('creates undo-able command', () => {
+    it('creates an undo-able RandomPoseCommand', () => {
         const { editor } = mkEditor(['head', 'neck', 'chest']);
         editor.generateRandomPose('safe');
         expect(editor.history.canUndo).toBe(true);
+        expect(editor.history.undoDescription).toBe('Random pose');
     });
 
-    it('pose in store changes after random', () => {
+    it('writes a full pose to the store (head changed by the jittered base)', () => {
         const { editor, store } = mkEditor(['head']);
-        const before = JSON.stringify(store.getState().pose);
         editor.generateRandomPose('safe');
-        // Pose should now contain head (from limits)
-        // (Limits include head so bone gets rotated)
-        expect(editor.history.canUndo).toBe(true);
+        expect(store.getState().pose.head).not.toEqual({ x: 0, y: 0, z: 0, w: 1 });
     });
 
-    it('undo restores pose before random', () => {
+    it('undo restores the pose before random', () => {
         const { editor, store } = mkEditor(['head']);
-        store.setPoseBone('head', { x:0.1,y:0.2,z:0.3,w:0.9 });
+        store.setPoseBone('head', { x: 0.1, y: 0.2, z: 0.3, w: 0.9 });
         const before = store.getState().pose;
         editor.generateRandomPose('safe');
         editor.undo();
         expect(store.getState().pose).toEqual(before);
+    });
+
+    it('accepts an injected rng (deterministic) and still commits', () => {
+        const { editor } = mkEditor(['head']);
+        const rng = () => 0.5;
+        editor.generateRandomPose('wild', rng);
+        expect(editor.history.canUndo).toBe(true);
     });
 });
 
