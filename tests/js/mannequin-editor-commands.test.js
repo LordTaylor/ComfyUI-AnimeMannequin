@@ -445,6 +445,13 @@ describe('applyPosePreset', () => {
         editor.applyPosePreset('does_not_exist');
         expect(editor.history.canUndo).toBe(undoBefore);
     });
+
+    it('clears an active IK chain so handles re-sync to the new pose', () => {
+        const { editor } = mkEditor(['upper_arm_L', 'upper_arm_R']);
+        editor._ikActiveChain = 'arm_L';
+        editor.applyPosePreset('t_pose');
+        expect(editor._ikActiveChain).toBeNull();
+    });
 });
 
 // ── MIRROR_PAIRS fingers ──────────────────────────────────────────────────────

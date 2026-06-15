@@ -318,6 +318,9 @@ export class MannequinEditor {
     applyPosePreset(id) {
         const preset = presetById(id);
         if (!preset) return;
+        // If an IK handle is being dragged, clear it so the handles re-sync to the new
+        // pose (update() only re-syncs handles while no chain is active).
+        if (this._ikActiveChain) this._deselect();
         const prevPose = this._store?.getState().pose ?? {};
         const nextPose = presetToPose(preset);
         for (const [name, q] of Object.entries(nextPose)) {
