@@ -106,6 +106,39 @@ vi.mock('../../static/src/ik-controller.js', () => {
     return { IKController };
 });
 
+vi.mock('../../static/src/pose-presets.js', () => {
+    const IDENTITY = { x: 0, y: 0, z: 0, w: 1 };
+    const T_POSE_PRESET = {
+        id: 't_pose', name: 'T-poza', group: 'basic',
+        angles: { upper_arm_L: [0, 0, 55], upper_arm_R: [0, 0, -55] },
+    };
+    function presetById(id) {
+        if (id === 't_pose') return T_POSE_PRESET;
+        return null;
+    }
+    function presetToPose(preset) {
+        // Return a deterministic map: upper_arm_L gets a non-identity quat, rest identity
+        const pose = {};
+        const boneNames = ['torso', 'spine', 'chest', 'neck', 'head',
+            'shoulder_L', 'upper_arm_L', 'forearm_L', 'hand_L',
+            'shoulder_R', 'upper_arm_R', 'forearm_R', 'hand_R',
+            'pelvis', 'thigh_L', 'shin_L', 'foot_L', 'thigh_R', 'shin_R', 'foot_R'];
+        const angles = preset?.angles ?? {};
+        for (const name of boneNames) {
+            if (name === 'upper_arm_L' && angles.upper_arm_L) {
+                // Approximate quaternion for [0, 0, 55 deg] in XYZ: z-rotation ~0.454
+                pose[name] = { x: 0, y: 0, z: 0.454, w: 0.891 };
+            } else if (name === 'upper_arm_R' && angles.upper_arm_R) {
+                pose[name] = { x: 0, y: 0, z: -0.454, w: 0.891 };
+            } else {
+                pose[name] = { ...IDENTITY };
+            }
+        }
+        return pose;
+    }
+    return { presetById, presetToPose };
+});
+
 const { AppStore, defaultState } = await import('../../static/src/app-store.js');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -383,6 +416,34 @@ describe('_selectBone gizmo reset', () => {
         editor._selectBone('upper_arm_L', null);
         expect(modeSpy).toHaveBeenCalledWith('rotate');
         expect(spaceSpy).toHaveBeenCalledWith('local');
+    });
+});
+
+// ── applyPosePreset ───────────────────────────────────────────────────────────
+
+describe('applyPosePreset', () => {
+    it('applyPosePreset commits a PosePresetCommand and leaves props/gender/proportions untouched', () => {
+        const { editor, store } = mkEditor(['upper_arm_L', 'upper_arm_R']);
+        const before = store.getState();
+        const propsBefore = JSON.stringify(before.props ?? []);
+        const genderBefore = before.gender;
+        const proportionsBefore = JSON.stringify(before.proportions);
+
+        editor.applyPosePreset('t_pose');
+
+        const after = store.getState();
+        expect(after.pose.upper_arm_L).not.toEqual({ x: 0, y: 0, z: 0, w: 1 });
+        expect(editor.history.canUndo).toBe(true);
+        expect(JSON.stringify(after.props ?? [])).toBe(propsBefore);
+        expect(after.gender).toBe(genderBefore);
+        expect(JSON.stringify(after.proportions)).toBe(proportionsBefore);
+    });
+
+    it('applyPosePreset with unknown id is a no-op', () => {
+        const { editor } = mkEditor(['upper_arm_L']);
+        const undoBefore = editor.history.canUndo;
+        editor.applyPosePreset('does_not_exist');
+        expect(editor.history.canUndo).toBe(undoBefore);
     });
 });
 

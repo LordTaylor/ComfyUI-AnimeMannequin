@@ -13,7 +13,9 @@ import {
     SetJointColorModeCommand,
     TransformPropCommand,
     IKPoseCommand,
+    PosePresetCommand,
 } from './commands.js';
+import { presetById, presetToPose } from './pose-presets.js';
 import { IKController } from './ik-controller.js';
 import { createIKHandles, setIKHandlesVisible, syncIKHandles } from './mannequin-renderer.js';
 
@@ -304,6 +306,26 @@ export class MannequinEditor {
         }
         if (this._store) {
             this._history.execute(new ResetPoseCommand(prevPose, nextPose), this._store);
+        }
+        this._renderer.markDirty();
+    }
+
+    /**
+     * Apply a built-in pose preset by id. Sets bone rotations only — gender, proportions,
+     * and props are untouched (attached props follow because they are bone children).
+     * Commits a PosePresetCommand so undo/redo works.
+     */
+    applyPosePreset(id) {
+        const preset = presetById(id);
+        if (!preset) return;
+        const prevPose = this._store?.getState().pose ?? {};
+        const nextPose = presetToPose(preset);
+        for (const [name, q] of Object.entries(nextPose)) {
+            const bone = this._renderer.bones.get(name);
+            if (bone) bone.quaternion.set(q.x, q.y, q.z, q.w);
+        }
+        if (this._store) {
+            this._history.execute(new PosePresetCommand(prevPose, nextPose), this._store);
         }
         this._renderer.markDirty();
     }
