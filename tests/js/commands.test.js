@@ -298,7 +298,7 @@ describe('prop commands', () => {
     });
 });
 
-import { IKPoseCommand } from '../../static/src/commands.js';
+import { IKPoseCommand, PosePresetCommand } from '../../static/src/commands.js';
 
 describe('IKPoseCommand', () => {
     function makeStore(initialPose) {
@@ -323,5 +323,27 @@ describe('IKPoseCommand', () => {
     it('description names IK', () => {
         const cmd = new IKPoseCommand({}, {});
         expect(cmd.description).toBe('IK pose');
+    });
+});
+
+describe('PosePresetCommand', () => {
+    function makeStore(initialPose) {
+        let pose = { ...initialPose };
+        return { setPose: (p) => { pose = { ...p }; }, getPose: () => pose };
+    }
+
+    it('execute sets next pose, undo restores prev pose', () => {
+        const prev = { upper_arm_L: { x: 0, y: 0, z: 0, w: 1 } };
+        const next = { upper_arm_L: { x: 0, y: 0, z: 0.7, w: 0.7 } };
+        const store = makeStore(prev);
+        const cmd = new PosePresetCommand(prev, next);
+        cmd.execute(store);
+        expect(store.getPose()).toEqual(next);
+        cmd.undo(store);
+        expect(store.getPose()).toEqual(prev);
+    });
+
+    it('description names the preset action', () => {
+        expect(new PosePresetCommand({}, {}).description).toBe('Apply pose preset');
     });
 });

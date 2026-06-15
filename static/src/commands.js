@@ -236,3 +236,19 @@ export class IKPoseCommand extends Command {
     undo(store)    { store.setPose(this._prev); }
     get description() { return 'IK pose'; }
 }
+
+/**
+ * Apply a built-in pose preset — snapshots the full pose before/after so the whole
+ * change undoes/redoes as one step. Mirrors RandomPoseCommand.
+ */
+export class PosePresetCommand extends Command {
+    constructor(prevPose, nextPose) {
+        super();
+        this._prev = { ...prevPose };
+        this._next = { ...nextPose };
+    }
+
+    execute(store) { store.setPose(this._next); }
+    undo(store)    { store.setPose(this._prev); }
+    get description() { return 'Apply pose preset'; }
+}
