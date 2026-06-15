@@ -362,7 +362,7 @@ export class MannequinEditor {
             const midW  = midB.getWorldPosition(new THREE.Vector3());
             const endW  = endB.getWorldPosition(new THREE.Vector3());
             const limbLen = rootW.distanceTo(midW) + midW.distanceTo(endW);
-            const target  = endW.clone().add(randomOffsetVec(rng, intensity.reachFrac * limbLen));
+            const target  = randomOffsetVec(rng, intensity.reachFrac * limbLen).add(endW);
             this._ikController.solve(chain.id, target);
         }
 

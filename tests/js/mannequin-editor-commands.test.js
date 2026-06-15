@@ -470,6 +470,183 @@ describe('applyPosePreset', () => {
     });
 });
 
+// ── generateRandomPose — IK-settle loop ──────────────────────────────────────
+//
+// Option A: vi.resetModules() + vi.doMock() isolates the IK_CHAINS override to
+// this single test so the existing 4 tests (which rely on IK_CHAINS=[]) are
+// unaffected. The fresh dynamic import gives us a MannequinEditor that reads the
+// one-chain IK_CHAINS we supply. The assertion `solveSpy.toHaveBeenCalledWith`
+// would fail if the IK loop were removed or if bones were missing (limbLen == 0
+// causes the loop to still call solve — the guard is only !rootB||!midB||!endB).
+//
+describe('generateRandomPose — IK-settle loop calls ikController.solve', () => {
+    it('calls solve once with the chain id when IK_CHAINS is non-empty', async () => {
+        // ── 1. Reset all module caches so doMock takes effect ──────────────
+        vi.resetModules();
+
+        const solveSpy = vi.fn();
+
+        // ── 2. Re-declare mocks that were wiped by resetModules ────────────
+        vi.doMock('../../static/lib/three.module.js', () => {
+            function makeVec(x=0,y=0,z=0) {
+                return {
+                    x, y, z,
+                    set(){ return this; },
+                    copy(){ return this; },
+                    add(v){ this.x+=v.x; this.y+=v.y; this.z+=v.z; return this; },
+                    distanceTo(v){ return Math.sqrt((this.x-v.x)**2+(this.y-v.y)**2+(this.z-v.z)**2); },
+                    clone(){ return makeVec(this.x,this.y,this.z); },
+                };
+            }
+            function makeQ() {
+                return {
+                    x:0, y:0, z:0, w:1,
+                    set(x,y,z,w){ this.x=x;this.y=y;this.z=z;this.w=w; },
+                    copy(o){ this.x=o.x;this.y=o.y;this.z=o.z;this.w=o.w; },
+                    setFromEuler(){ this.x=0;this.y=0;this.z=0;this.w=1; },
+                };
+            }
+            function Raycaster()  { this.setFromCamera=()=>{}; this.intersectObjects=()=>[]; }
+            function Vector2()    { this.x=0; this.y=0; }
+            function Vector3()    { return makeVec(); }
+            function Euler()      { this.set=()=>{}; }
+            function Quaternion() { return makeQ(); }
+            function Object3D()   {
+                this.userData={}; this.position=makeVec(); this.quaternion=makeQ();
+                this.getWorldPosition=v=>v; this.add=()=>{}; this.remove=()=>{}; this.traverse=fn=>fn(this);
+            }
+            return {
+                Raycaster, Vector2, Vector3, Euler, Quaternion, Object3D,
+                MathUtils: { degToRad: d => d * Math.PI / 180 },
+            };
+        });
+
+        vi.doMock('../../static/lib/OrbitControls.js', () => {
+            function OrbitControls() {
+                this.update=()=>{}; this.dispose=()=>{}; this.enableDamping=true;
+                this.target={ set(){} }; this.enabled=true; this.addEventListener=()=>{};
+            }
+            return { OrbitControls };
+        });
+        vi.doMock('../../static/lib/TransformControls.js', () => {
+            function TransformControls() {
+                this.setMode=()=>{}; this.setSpace=()=>{}; this.userData={};
+                this.addEventListener=()=>{}; this.attach=()=>{}; this.detach=()=>{};
+                this.dispose=()=>{}; this.add=()=>{};
+            }
+            return { TransformControls };
+        });
+        vi.doMock('../../static/src/geometry-adapter-gltf.js', () => ({
+            SELECT_COLOR: 0x00ff00, JOINT_COLOR: 0xffffff,
+        }));
+        vi.doMock('../../static/src/mannequin-model.js', () => ({
+            defaultScene: g => ({ gender:g, bones:{}, proportions:{} }),
+            BONE_NAMES: [], BONE_CHILDREN: {},
+            defaultProportions: () => ({ head:1, bust:1, hips:1, waist:1, legs:1, arms:1 }),
+        }));
+        vi.doMock('../../static/src/finger-presets.js', () => ({
+            buildPresetPose: () => ({}),
+            FINGER_BONES: [],
+        }));
+        vi.doMock('../../static/src/mannequin-renderer.js', () => {
+            const handleMap = new Map();
+            return {
+                BUST_DEFAULTS: {},
+                createIKHandles: vi.fn(() => handleMap),
+                setIKHandlesVisible: vi.fn(),
+                syncIKHandles: vi.fn(),
+            };
+        });
+        vi.doMock('../../static/src/pose-presets.js', () => ({
+            presetById: () => ({ id: 't_pose', name: 'T', group: 'basic', angles: {} }),
+            presetToPose: () => ({}),
+        }));
+        vi.doMock('../../static/src/smart-pose.js', () => ({
+            ELIGIBLE_PRESET_IDS: ['t_pose'],
+            TORSO_BONES: [],
+            INTENSITY: { safe: { jitterDeg: 8, reachFrac: 0.12 } },
+            pickBasePreset: () => ({ id: 't_pose', name: 'T', group: 'basic', angles: {} }),
+            jitterPose: (pose) => ({ ...pose }),
+            // Returns a real Vector3-like with working add() so limbLen calculation is harmless
+            randomOffsetVec: () => {
+                const v = { x:0.1, y:0.1, z:0.1 };
+                v.add = (other) => { v.x+=other.x; v.y+=other.y; v.z+=other.z; return v; };
+                return v;
+            },
+        }));
+
+        // ── 3. The key override: one-chain IK_CHAINS + spy on solve ────────
+        vi.doMock('../../static/src/ik-controller.js', () => {
+            function IKController() { this.solve = solveSpy; }
+            const IK_CHAINS = [
+                { id: 'arm_L', root: 'upper_arm_L', mid: 'forearm_L', end: 'hand_L', defaultPole: [0,0,-1] },
+            ];
+            return { IKController, IK_CHAINS };
+        });
+
+        // ── 4. Dynamically import fresh modules ────────────────────────────
+        const { AppStore: AppStore2, defaultState: defaultState2 } =
+            await import('../../static/src/app-store.js');
+        const { MannequinEditor: MannequinEditor2 } =
+            await import('../../static/src/mannequin-editor.js');
+
+        // ── 5. Build renderer with arm bones that have distinct world positions
+        //       so limbLen > 0 and so the chain doesn't skip (the guard is only
+        //       "if (!rootB || !midB || !endB) continue").
+        const makeVec3 = (x=0,y=0,z=0) => ({
+            x, y, z,
+            add(v){ this.x+=v.x; this.y+=v.y; this.z+=v.z; return this; },
+            distanceTo(v){ return Math.sqrt((this.x-v.x)**2+(this.y-v.y)**2+(this.z-v.z)**2); },
+            clone(){ return makeVec3(this.x,this.y,this.z); },
+        });
+
+        const makeQ2 = () => ({ x:0, y:0, z:0, w:1, set(x,y,z,w){ this.x=x;this.y=y;this.z=z;this.w=w; } });
+
+        // Distinct world positions: root at y=1, mid at y=0.5, end at y=0
+        const bonePositions = {
+            upper_arm_L: makeVec3(0,1,0),
+            forearm_L:   makeVec3(0,0.5,0),
+            hand_L:      makeVec3(0,0,0),
+        };
+        const bones = new Map();
+        for (const [name, pos] of Object.entries(bonePositions)) {
+            bones.set(name, {
+                userData: {},
+                quaternion: makeQ2(),
+                getWorldPosition(target) {
+                    target.x = pos.x; target.y = pos.y; target.z = pos.z;
+                    return target;
+                },
+            });
+        }
+
+        const renderer2 = {
+            camera:   { aspect:1, updateProjectionMatrix(){} },
+            scene:    { add(){}, traverse(fn){} },
+            bones,
+            markDirty:      vi.fn(),
+            applyScene:     vi.fn(),
+            buildMannequin: vi.fn().mockResolvedValue(undefined),
+            getSceneData:   vi.fn(() => ({ gender:'F', bones:{}, proportions:{} })),
+        };
+        const canvas2 = {
+            addEventListener(){},
+            getBoundingClientRect(){ return {left:0,top:0,width:100,height:100}; },
+        };
+        const store2  = new AppStore2(defaultState2('F'));
+        const editor2 = new MannequinEditor2(renderer2, canvas2, store2);
+
+        // ── 6. Run and assert ──────────────────────────────────────────────
+        editor2.generateRandomPose('safe');
+
+        expect(solveSpy).toHaveBeenCalledOnce();
+        expect(solveSpy).toHaveBeenCalledWith('arm_L', expect.anything());
+
+        // Clean up doMock overrides so they don't bleed into sibling test files
+        vi.resetModules();
+    });
+});
+
 // ── MIRROR_PAIRS fingers ──────────────────────────────────────────────────────
 
 describe('MIRROR_PAIRS fingers', () => {
