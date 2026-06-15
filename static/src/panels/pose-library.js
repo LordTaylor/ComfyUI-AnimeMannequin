@@ -1,3 +1,5 @@
+import { POSE_PRESETS } from '../pose-presets.js';
+
 const STORAGE_KEY = 'mannequin_poses';
 
 export class PoseLibrary {
@@ -93,6 +95,37 @@ export class PoseLibrary {
         if (this._panel) this._panel.style.display = this._visible ? 'flex' : 'none';
     }
 
+    _buildPresetsSection() {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'flex-shrink:0;border-bottom:1px solid #444;max-height:40%;overflow-y:auto;padding:4px;';
+
+        const groups = [
+            { key: 'basic',  label: 'Basic'  },
+            { key: 'combat', label: 'Combat' },
+        ];
+        for (const g of groups) {
+            const presets = POSE_PRESETS.filter(p => p.group === g.key);
+            if (!presets.length) continue;
+
+            const gLabel = document.createElement('div');
+            gLabel.textContent = g.label;
+            gLabel.style.cssText = 'color:#888;font-size:10px;text-transform:uppercase;letter-spacing:1px;padding:4px 4px 2px;';
+            wrap.appendChild(gLabel);
+
+            for (const p of presets) {
+                const row = document.createElement('button');
+                row.dataset.presetId = p.id;
+                row.textContent = p.name;
+                row.style.cssText = 'display:block;width:100%;text-align:left;padding:5px 6px;margin:1px 0;background:#2b2b2b;color:#ddd;border:none;border-radius:3px;cursor:pointer;font-size:11px;';
+                row.onmouseenter = () => { row.style.background = '#3a3a3a'; };
+                row.onmouseleave = () => { row.style.background = '#2b2b2b'; };
+                row.onclick = () => this._editor.applyPosePreset(p.id);
+                wrap.appendChild(row);
+            }
+        }
+        return wrap;
+    }
+
     mount(container) {
         this._panel = document.createElement('div');
         this._panel.style.cssText = [
@@ -166,6 +199,7 @@ export class PoseLibrary {
         this._listEl.style.cssText = 'flex:1;overflow-y:auto;padding:4px;';
 
         this._panel.appendChild(header);
+        this._panel.appendChild(this._buildPresetsSection());
         this._panel.appendChild(this._listEl);
         container.appendChild(this._panel);
         this._renderList();
