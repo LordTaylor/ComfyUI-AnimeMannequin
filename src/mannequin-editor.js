@@ -75,6 +75,7 @@ export class MannequinEditor {
         this._ikHandles     = createIKHandles(renderer.scene);
         this._ikActiveChain = null;          // chainId currently driven by the gizmo
         this._poseBeforeIK  = null;          // full pose snapshot for undo
+        this._ikPole        = null;          // locked bend pole for the active drag (joint blockade)
 
         // Capture bone/prop transform before drag starts (for undo)
         this._quatBeforeDrag = null;
@@ -92,6 +93,9 @@ export class MannequinEditor {
             if (this._ikActiveChain) {
                 const pose = this._store?.getState().pose ?? {};
                 this._poseBeforeIK = { ...pose };
+                // Lock the bend side now (joint blockade): keep this pole for the whole drag so
+                // the elbow/knee can't flip to the wrong side when dragged through the straight pose.
+                this._ikPole = this._ikController.currentPole(this._ikActiveChain);
             }
         });
 
@@ -128,6 +132,7 @@ export class MannequinEditor {
                         this._history.execute(new IKPoseCommand(prev, nextPose), this._store);
                     }
                     this._poseBeforeIK = null;
+                    this._ikPole = null;
                 }
 
                 // Prop drag ended
@@ -156,7 +161,7 @@ export class MannequinEditor {
             const handle = this._ikHandles.get(this._ikActiveChain);
             if (!handle) return;
             const target = handle.getWorldPosition(new THREE.Vector3());
-            this._ikController.solve(this._ikActiveChain, target);
+            this._ikController.solve(this._ikActiveChain, target, this._ikPole);
             this._syncPoseToStore();
             this._renderer.markDirty();
         });
@@ -497,6 +502,7 @@ export class MannequinEditor {
         this._propBeforeDrag = null;
         this._ikActiveChain  = null;
         this._poseBeforeIK   = null;
+        this._ikPole         = null;
         this._transform.detach();
     }
 

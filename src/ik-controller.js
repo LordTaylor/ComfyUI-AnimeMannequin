@@ -23,7 +23,7 @@ export class IKController {
      * Solve a chain so its effector reaches targetWorld (THREE.Vector3),
      * mutating the root and mid bone quaternions. End bone untouched.
      */
-    solve(chainId, targetWorld) {
+    solve(chainId, targetWorld, poleOverride = null) {
         const chain = this._chainById.get(chainId);
         if (!chain) return;
         const rootB = this._bones.get(chain.root);
@@ -38,18 +38,9 @@ export class IKController {
         const lenA = midW0.distanceTo(rootW);
         const lenB = endW0.distanceTo(midW0);
 
-        // auto-pole: current bulge direction = component of (mid-root) perpendicular
-        // to the root→end axis. Fall back to per-chain default if degenerate.
-        const axis = endW0.clone().sub(rootW);
-        let pole;
-        if (axis.lengthSq() > 1e-10) {
-            const n = axis.clone().normalize();
-            const rm = midW0.clone().sub(rootW);
-            const perp = rm.sub(n.clone().multiplyScalar(rm.dot(n)));
-            pole = perp.lengthSq() > 1e-8 ? v2a(perp) : chain.defaultPole;
-        } else {
-            pole = chain.defaultPole;
-        }
+        // Bend side. A locked pole (joint blockade, captured at drag start) keeps the
+        // elbow/knee from flipping to the wrong side; without it, derive from the current bend.
+        const pole = poleOverride ?? this._poleFromCurrent(rootW, midW0, endW0, chain);
 
         const res = solveTwoBone({
             root: v2a(rootW), target: v2a(targetWorld), lenA, lenB, pole,
@@ -69,6 +60,37 @@ export class IKController {
             this._aimBoneChildTo(midB, endB, midW1, endTarget);
             midB.updateWorldMatrix(true, true);
         }
+    }
+
+    /**
+     * World bend-pole from the chain's CURRENT configuration — the side the elbow/knee
+     * currently bends toward (perpendicular component of mid-root vs the root→end axis), or
+     * the chain's anatomical default when the limb is straight. Plain [x,y,z]. null if no chain.
+     * Capture this at drag start and pass it back to solve() as poleOverride to lock the bend
+     * side (joint blockade), so dragging through the straight pose can't flip the joint.
+     */
+    currentPole(chainId) {
+        const chain = this._chainById.get(chainId);
+        if (!chain) return null;
+        const rootB = this._bones.get(chain.root);
+        const midB  = this._bones.get(chain.mid);
+        const endB  = this._bones.get(chain.end);
+        if (!rootB || !midB || !endB) return null;
+        return this._poleFromCurrent(
+            rootB.getWorldPosition(new THREE.Vector3()),
+            midB.getWorldPosition(new THREE.Vector3()),
+            endB.getWorldPosition(new THREE.Vector3()), chain);
+    }
+
+    _poleFromCurrent(rootW, midW0, endW0, chain) {
+        const axis = endW0.clone().sub(rootW);
+        if (axis.lengthSq() > 1e-10) {
+            const n = axis.clone().normalize();
+            const rm = midW0.clone().sub(rootW);
+            const perp = rm.sub(n.clone().multiplyScalar(rm.dot(n)));
+            if (perp.lengthSq() > 1e-8) return v2a(perp);
+        }
+        return chain.defaultPole;
     }
 
     /**
