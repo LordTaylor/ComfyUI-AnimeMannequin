@@ -24,12 +24,15 @@ export const POSE_PRESETS = [
         upper_arm_L: [0, -10, 25], forearm_L: [85, 0, 0],
         upper_arm_R: [0, 10, -25], forearm_R: [85, 0, 0],
     } },
+    // FLEXION SIGN CONVENTION (this rig): forward flexion of the SHOULDER (upper_arm) and
+    // HIP (thigh) is NEGATIVE X. (Positive X swings them backward.) The ELBOW (forearm +X)
+    // and KNEE (shin −X) keep their empirical bend signs — those are correct as-is.
     { id: 'arms_crossed', name: 'Ręce skrzyżowane', group: 'basic', angles: {
-        upper_arm_L: [30, 0, 18], forearm_L: [100, 0, 0],
-        upper_arm_R: [30, 0, -18], forearm_R: [100, 0, 0],
+        upper_arm_L: [-30, 0, 18], forearm_L: [100, 0, 0],
+        upper_arm_R: [-30, 0, -18], forearm_R: [100, 0, 0],
     } },
     { id: 'contrapposto', name: 'Kontrapost', group: 'basic', angles: {
-        pelvis: [0, 0, 8], thigh_L: [2, 0, -6], thigh_R: [-4, 0, 4],
+        pelvis: [0, 0, 8], thigh_L: [-2, 0, -6], thigh_R: [4, 0, 4],
         upper_arm_L: [0, 0, 8], upper_arm_R: [0, 0, -10],
     } },
     { id: 'waving', name: 'Machanie', group: 'basic', angles: {
@@ -37,40 +40,40 @@ export const POSE_PRESETS = [
         upper_arm_L: [0, 0, 10],
     } },
     { id: 'sitting', name: 'Siad', group: 'basic', angles: {
-        // Z must stay 0: at 90° hip flexion a Z component gimbal-couples into yaw and
-        // splays the knees sideways in front view. Knees parallel-forward = clean sit.
-        thigh_L: [90, 0, 0], shin_L: [-95, 0, 0],
-        thigh_R: [90, 0, 0], shin_R: [-95, 0, 0],
+        // Hip flexes forward at NEGATIVE X. Z stays 0: at 90° flexion a Z component
+        // gimbal-couples into yaw and splays the knees sideways. Knees parallel-forward.
+        thigh_L: [-90, 0, 0], shin_L: [-95, 0, 0],
+        thigh_R: [-90, 0, 0], shin_R: [-95, 0, 0],
     } },
     { id: 'walking', name: 'Krok / marsz', group: 'basic', angles: {
-        thigh_L: [28, 0, 0], shin_L: [-15, 0, 0],
-        thigh_R: [-22, 0, 0], shin_R: [-30, 0, 0],
-        upper_arm_L: [-25, 0, 0], upper_arm_R: [25, 0, 0],
+        thigh_L: [-28, 0, 0], shin_L: [-15, 0, 0],
+        thigh_R: [22, 0, 0], shin_R: [-30, 0, 0],
+        upper_arm_L: [25, 0, 0], upper_arm_R: [-25, 0, 0],
     } },
     // ── Combat (body only — weapon/shield attached as a prop) ──────────────────
     { id: 'rifle', name: 'Strzelecka — karabin', group: 'combat', angles: {
-        upper_arm_L: [70, 0, 12], forearm_L: [45, 0, 0],
-        upper_arm_R: [62, 0, -12], forearm_R: [65, 0, 0],
-        thigh_R: [-12, 0, 0], shin_R: [-10, 0, 0],
+        upper_arm_L: [-70, 0, 12], forearm_L: [45, 0, 0],
+        upper_arm_R: [-62, 0, -12], forearm_R: [65, 0, 0],
+        thigh_R: [12, 0, 0], shin_R: [-10, 0, 0],
     } },
     { id: 'pistol', name: 'Strzelecka — pistolet', group: 'combat', angles: {
-        upper_arm_L: [82, 0, 6], forearm_L: [10, 0, 0],
-        upper_arm_R: [82, 0, -6], forearm_R: [10, 0, 0],
+        upper_arm_L: [-82, 0, 6], forearm_L: [10, 0, 0],
+        upper_arm_R: [-82, 0, -6], forearm_R: [10, 0, 0],
     } },
     { id: 'saber', name: 'Szermiercza — szabla', group: 'combat', angles: {
-        upper_arm_R: [80, 0, -6], forearm_R: [10, 0, 0],
-        upper_arm_L: [-30, 0, 14], forearm_L: [30, 0, 0],
-        thigh_R: [22, 0, 0], shin_R: [-18, 0, 0], thigh_L: [-10, 0, 0],
+        upper_arm_R: [-80, 0, -6], forearm_R: [10, 0, 0],
+        upper_arm_L: [30, 0, 14], forearm_L: [30, 0, 0],
+        thigh_R: [-22, 0, 0], shin_R: [-18, 0, 0], thigh_L: [10, 0, 0],
     } },
     { id: 'sword_shield', name: 'Szermiercza — miecz + tarcza', group: 'combat', angles: {
-        upper_arm_L: [72, 0, 12], forearm_L: [50, 0, 0],
-        upper_arm_R: [70, 0, -12], forearm_R: [55, 0, 0],
-        thigh_L: [22, 0, 0], shin_L: [-18, 0, 0], thigh_R: [-10, 0, 0],
+        upper_arm_L: [-72, 0, 12], forearm_L: [50, 0, 0],
+        upper_arm_R: [-70, 0, -12], forearm_R: [55, 0, 0],
+        thigh_L: [-22, 0, 0], shin_L: [-18, 0, 0], thigh_R: [10, 0, 0],
     } },
     { id: 'rapier', name: 'Szermiercza — rapier (en-garde)', group: 'combat', angles: {
-        upper_arm_R: [80, 0, -6], forearm_R: [8, 0, 0],
-        upper_arm_L: [-40, 0, 40], forearm_L: [70, 0, 0],
-        thigh_R: [22, 0, 0], shin_R: [-18, 0, 0], thigh_L: [-10, 0, 0],
+        upper_arm_R: [-80, 0, -6], forearm_R: [8, 0, 0],
+        upper_arm_L: [40, 0, 40], forearm_L: [70, 0, 0],
+        thigh_R: [-22, 0, 0], shin_R: [-18, 0, 0], thigh_L: [10, 0, 0],
     } },
 ];
 
