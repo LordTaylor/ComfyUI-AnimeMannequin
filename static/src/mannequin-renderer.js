@@ -68,20 +68,26 @@ const FACE_LIMBS = [
 const FACE_KP_COLORS = { eye_R: 0xaa00ff, eye_L: 0xff00ff, ear_R: 0xff00aa, ear_L: 0xff0055 };
 
 /**
- * Synthetic OpenPose face keypoints (eyes/ears) derived from the head bone. All inputs are
- * world-space THREE.Vector3; returns world-space positions for eye_L/eye_R/ear_L/ear_R.
- * Orientation comes from the live skeleton so it tracks head tilt + body/camera rotation:
- *   up = neck→head, left = shoulder_R→shoulder_L, forward = left×up (anchored to +Z front).
- * Eyes sit forward+up+slightly to the sides; ears wider and slightly back. Scaled by neck→head dist.
+ * Synthetic OpenPose face keypoints (eyes/ears) derived from the head bone.
+ * @param headPos,neckPos  world-space THREE.Vector3 (head/neck bone origins) — set the scale + up axis
+ * @param headQuat         head bone WORLD quaternion — gives forward/left so the face tracks the
+ *                         head's full rotation including YAW (turning left/right), not just tilt.
+ * Returns world-space positions for eye_L/eye_R/ear_L/ear_R. Eyes sit forward+up+slightly to the
+ * sides; ears wider and slightly back. up = neck→head; forward = head-local +Z; left = head-local +X
+ * (both re-orthogonalised against up). Scaled by neck→head distance.
  */
-export function computeFaceKeypoints(headPos, neckPos, shLPos, shRPos) {
+export function computeFaceKeypoints(headPos, neckPos, headQuat) {
     const up = headPos.clone().sub(neckPos);
     const R = up.length() || 0.12;
     up.normalize();
-    const left  = shLPos.clone().sub(shRPos).normalize();   // toward the model's left
+    // forward/left from the head's own orientation → tracks yaw + tilt
+    const fwd  = new THREE.Vector3(0, 0, 1).applyQuaternion(headQuat);
+    const left = new THREE.Vector3(1, 0, 0).applyQuaternion(headQuat);
+    fwd.addScaledVector(up, -fwd.dot(up));
+    if (fwd.lengthSq() < 1e-8) fwd.set(0, 0, 1); else fwd.normalize();
+    left.addScaledVector(up, -left.dot(up));
+    if (left.lengthSq() < 1e-8) left.set(1, 0, 0); else left.normalize();
     const right = left.clone().negate();
-    const fwd = new THREE.Vector3().crossVectors(left, up).normalize();
-    if (fwd.z < 0) fwd.negate();                            // front faces +Z (default camera)
     const mk = (u, f, sv) => headPos.clone()
         .addScaledVector(up, u * R).addScaledVector(fwd, f * R).add(sv.clone().multiplyScalar(R));
     return {
@@ -791,14 +797,12 @@ export class MannequinRenderer {
         }
 
         // Synthetic face keypoints (eyes/ears) derived from the head bone.
-        const _h = this._bones.get('head'),       _n  = this._bones.get('neck');
-        const _sl = this._bones.get('shoulder_L'), _sr = this._bones.get('shoulder_R');
-        if (_h && _n && _sl && _sr) {
+        const _h = this._bones.get('head'), _n = this._bones.get('neck');
+        if (_h && _n) {
             const face = computeFaceKeypoints(
                 _h.getWorldPosition(new THREE.Vector3()),
                 _n.getWorldPosition(new THREE.Vector3()),
-                _sl.getWorldPosition(new THREE.Vector3()),
-                _sr.getWorldPosition(new THREE.Vector3()));
+                _h.getWorldQuaternion(new THREE.Quaternion()));
             for (const [k, pos] of Object.entries(face)) {
                 const p = pos.project(this._camera);
                 sp.set(k, { x: (p.x * 0.5 + 0.5) * W, y: (-p.y * 0.5 + 0.5) * H });
