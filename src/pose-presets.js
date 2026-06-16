@@ -37,8 +37,10 @@ export const POSE_PRESETS = [
         upper_arm_L: [0, 0, 10],
     } },
     { id: 'sitting', name: 'Siad', group: 'basic', angles: {
-        thigh_L: [90, 0, 4], shin_L: [-95, 0, 0],
-        thigh_R: [90, 0, -4], shin_R: [-95, 0, 0],
+        // Z must stay 0: at 90° hip flexion a Z component gimbal-couples into yaw and
+        // splays the knees sideways in front view. Knees parallel-forward = clean sit.
+        thigh_L: [90, 0, 0], shin_L: [-95, 0, 0],
+        thigh_R: [90, 0, 0], shin_R: [-95, 0, 0],
     } },
     { id: 'walking', name: 'Krok / marsz', group: 'basic', angles: {
         thigh_L: [28, 0, 0], shin_L: [-15, 0, 0],
