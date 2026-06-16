@@ -86,3 +86,44 @@ describe('IKController.effectorWorld / chain', () => {
         expect([out.x, out.y, out.z]).toEqual([0, 0, 0]);
     });
 });
+
+describe('IKController joint blockade (locked pole)', () => {
+    function bendSideFn(scene, upper, fore, hand, pole) {
+        const p = new THREE.Vector3(pole[0], pole[1], pole[2]);
+        return () => {
+            scene.updateMatrixWorld(true);
+            const r = upper.getWorldPosition(new THREE.Vector3());
+            const m = fore.getWorldPosition(new THREE.Vector3());
+            const e = hand.getWorldPosition(new THREE.Vector3());
+            const axis = e.clone().sub(r);
+            if (axis.lengthSq() < 1e-9) return 0;
+            const n = axis.normalize();
+            const rm = m.clone().sub(r);
+            const perp = rm.sub(n.clone().multiplyScalar(rm.dot(n)));
+            return perp.dot(p);   // >0 means mid is on the locked-pole side
+        };
+    }
+
+    it('currentPole returns a 3-vector for a valid chain, null for an unknown one', () => {
+        const { bones } = makeArmChain();
+        const ctrl = new IKController({ bones });
+        const p = ctrl.currentPole('arm_L');
+        expect(Array.isArray(p)).toBe(true);
+        expect(p).toHaveLength(3);
+        expect(ctrl.currentPole('nope')).toBeNull();
+    });
+
+    it('a locked pole keeps the elbow on the same side through targets that would flip it', () => {
+        const { scene, bones, upper, fore, hand } = makeArmChain();
+        const ctrl = new IKController({ bones });
+        const locked = ctrl.currentPole('arm_L');   // captured at "drag start"
+        const bendSide = bendSideFn(scene, upper, fore, hand, locked);
+
+        // drag through near-straight and to the opposite hemisphere — must never flip negative
+        const targets = [[0.3, 0.3, 0.2], [0, -0.2, 0.5], [0, -1.9, 0], [-0.3, 0.3, -0.2], [0, 0.3, -0.4]];
+        for (const t of targets) {
+            ctrl.solve('arm_L', new THREE.Vector3(t[0], t[1], t[2]), locked);
+            expect(bendSide()).toBeGreaterThan(-1e-6);
+        }
+    });
+});
