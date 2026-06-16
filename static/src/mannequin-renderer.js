@@ -56,6 +56,42 @@ const SKELETON_LIMBS = [
     ['shin_L',      'foot_L',      0x5500ff],  // 12-13
 ];
 
+// Synthetic face keypoints (COCO 14-17) + their connections — the "horns" off the head.
+// The mannequin has no eye/ear geometry, so these are derived from the head bone at draw time.
+// Canonical OpenPose keypoint colors: 14 R-eye, 15 L-eye, 16 R-ear, 17 L-ear.
+const FACE_LIMBS = [
+    ['head',  'eye_R', 0xaa00ff],  // 0-14
+    ['head',  'eye_L', 0xff00ff],  // 0-15
+    ['eye_R', 'ear_R', 0xff00aa],  // 14-16
+    ['eye_L', 'ear_L', 0xff0055],  // 15-17
+];
+const FACE_KP_COLORS = { eye_R: 0xaa00ff, eye_L: 0xff00ff, ear_R: 0xff00aa, ear_L: 0xff0055 };
+
+/**
+ * Synthetic OpenPose face keypoints (eyes/ears) derived from the head bone. All inputs are
+ * world-space THREE.Vector3; returns world-space positions for eye_L/eye_R/ear_L/ear_R.
+ * Orientation comes from the live skeleton so it tracks head tilt + body/camera rotation:
+ *   up = neck→head, left = shoulder_R→shoulder_L, forward = left×up (anchored to +Z front).
+ * Eyes sit forward+up+slightly to the sides; ears wider and slightly back. Scaled by neck→head dist.
+ */
+export function computeFaceKeypoints(headPos, neckPos, shLPos, shRPos) {
+    const up = headPos.clone().sub(neckPos);
+    const R = up.length() || 0.12;
+    up.normalize();
+    const left  = shLPos.clone().sub(shRPos).normalize();   // toward the model's left
+    const right = left.clone().negate();
+    const fwd = new THREE.Vector3().crossVectors(left, up).normalize();
+    if (fwd.z < 0) fwd.negate();                            // front faces +Z (default camera)
+    const mk = (u, f, sv) => headPos.clone()
+        .addScaledVector(up, u * R).addScaledVector(fwd, f * R).add(sv.clone().multiplyScalar(R));
+    return {
+        eye_L: mk(0.30,  0.65, left.clone().multiplyScalar(0.22)),
+        eye_R: mk(0.30,  0.65, right.clone().multiplyScalar(0.22)),
+        ear_L: mk(0.10, -0.05, left.clone().multiplyScalar(0.50)),
+        ear_R: mk(0.10, -0.05, right.clone().multiplyScalar(0.50)),
+    };
+}
+
 // Per-finger limb color (int) for the viewport skeleton overlay.
 const FINGER_LIMB_COLORS = { thumb: 0xff0000, index: 0xffaa00, middle: 0x00ff00, ring: 0x00aaff, pinky: 0xaa00ff };
 
@@ -754,6 +790,21 @@ export class MannequinRenderer {
             sp.set(name, { x: (p.x * 0.5 + 0.5) * W, y: (-p.y * 0.5 + 0.5) * H });
         }
 
+        // Synthetic face keypoints (eyes/ears) derived from the head bone.
+        const _h = this._bones.get('head'),       _n  = this._bones.get('neck');
+        const _sl = this._bones.get('shoulder_L'), _sr = this._bones.get('shoulder_R');
+        if (_h && _n && _sl && _sr) {
+            const face = computeFaceKeypoints(
+                _h.getWorldPosition(new THREE.Vector3()),
+                _n.getWorldPosition(new THREE.Vector3()),
+                _sl.getWorldPosition(new THREE.Vector3()),
+                _sr.getWorldPosition(new THREE.Vector3()));
+            for (const [k, pos] of Object.entries(face)) {
+                const p = pos.project(this._camera);
+                sp.set(k, { x: (p.x * 0.5 + 0.5) * W, y: (-p.y * 0.5 + 0.5) * H });
+            }
+        }
+
         const dotR  = Math.max(5, Math.round(W / 70));
         const lineW = Math.max(3, Math.round(W / 90));
 
@@ -765,8 +816,8 @@ export class MannequinRenderer {
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
 
-        // Draw limb lines
-        for (const [a, b, col] of SKELETON_LIMBS) {
+        // Draw limb lines (body + face "horns")
+        for (const [a, b, col] of [...SKELETON_LIMBS, ...FACE_LIMBS]) {
             const pa = sp.get(a), pb = sp.get(b);
             if (!pa || !pb) continue;
             ctx.strokeStyle = rgb(col);
@@ -785,6 +836,14 @@ export class MannequinRenderer {
                 ctx.fillStyle = rgb(dotCol);
                 ctx.beginPath(); ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2); ctx.fill();
             }
+        }
+
+        // Face keypoint dots (eyes/ears) — canonical COCO 14-17 colors
+        for (const [k, dotCol] of Object.entries(FACE_KP_COLORS)) {
+            const p = sp.get(k);
+            if (!p) continue;
+            ctx.fillStyle = rgb(dotCol);
+            ctx.beginPath(); ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2); ctx.fill();
         }
 
         for (const side of ['L', 'R']) this._drawHand(ctx, this._computeHandKeypoints(side), W);
