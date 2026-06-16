@@ -92,11 +92,11 @@ export function computeFaceKeypoints(headPos, neckPos, headQuat) {
     const mk = (u, f, sv) => headPos.clone()
         .addScaledVector(up, u * R).addScaledVector(fwd, f * R).add(sv.clone().multiplyScalar(R));
     return {
-        // bigger / higher / wider than the first pass (per visual feedback)
-        eye_L: mk(0.60, 0.60, left.clone().multiplyScalar(0.30)),
-        eye_R: mk(0.60, 0.60, right.clone().multiplyScalar(0.30)),
-        ear_L: mk(0.45, -0.05, left.clone().multiplyScalar(0.85)),
-        ear_R: mk(0.45, -0.05, right.clone().multiplyScalar(0.85)),
+        // head bone origin sits low (jaw); lift to eye/ear level and widen to head sides.
+        eye_L: mk(1.60, 0.50, left.clone().multiplyScalar(0.55)),
+        eye_R: mk(1.60, 0.50, right.clone().multiplyScalar(0.55)),
+        ear_L: mk(1.15, -0.05, left.clone().multiplyScalar(1.35)),
+        ear_R: mk(1.15, -0.05, right.clone().multiplyScalar(1.35)),
     };
 }
 
