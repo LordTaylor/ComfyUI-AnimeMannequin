@@ -4,7 +4,7 @@ import { computeFaceKeypoints } from '../../static/src/mannequin-renderer.js';
 
 const head = new THREE.Vector3(0, 1.60, 0);
 const neck = new THREE.Vector3(0, 1.45, 0);
-const noRot = new THREE.Quaternion();   // head facing -Z (nose/forward), +X = left
+const noRot = new THREE.Quaternion();   // head facing +Z (nose/forward), +X = left
 
 describe('computeFaceKeypoints', () => {
     it('returns the four face keypoints', () => {
@@ -12,10 +12,10 @@ describe('computeFaceKeypoints', () => {
         expect(Object.keys(f).sort()).toEqual(['ear_L', 'ear_R', 'eye_L', 'eye_R']);
     });
 
-    it('eyes sit forward (toward the nose, -Z) and above the head origin (no head rotation)', () => {
+    it('eyes sit forward (toward the nose, +Z) and above the head origin (no head rotation)', () => {
         const f = computeFaceKeypoints(head, neck, noRot);
         for (const e of [f.eye_L, f.eye_R]) {
-            expect(e.z).toBeLessThan(head.z);   // forward = -Z (nose)
+            expect(e.z).toBeGreaterThan(head.z);   // forward = +Z (nose)
             expect(e.y).toBeGreaterThan(head.y);
         }
     });

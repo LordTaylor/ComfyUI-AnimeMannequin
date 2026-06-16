@@ -73,17 +73,16 @@ const FACE_KP_COLORS = { eye_R: 0xaa00ff, eye_L: 0xff00ff, ear_R: 0xff00aa, ear_
  * @param headQuat         head bone WORLD quaternion — gives forward/left so the face tracks the
  *                         head's full rotation including YAW (turning left/right), not just tilt.
  * Returns world-space positions for eye_L/eye_R/ear_L/ear_R. Eyes sit forward+up+slightly to the
- * sides; ears wider and slightly back. up = neck→head; forward = head-local −Z (toward the
- * model's nose/face on this rig); left = head-local +X (both re-orthogonalised against up).
- * Scaled by neck→head distance.
+ * sides; ears wider and slightly back. up = neck→head; forward = head-local +Z (the model's
+ * nose/face points +Z — front faces the default camera at +Z); left = head-local +X (both
+ * re-orthogonalised against up). Scaled by neck→head distance.
  */
 export function computeFaceKeypoints(headPos, neckPos, headQuat) {
     const up = headPos.clone().sub(neckPos);
     const R = up.length() || 0.12;
     up.normalize();
     // forward/left from the head's own orientation → tracks yaw + tilt.
-    // Forward is head-local −Z: the nose/face points that way on this rig.
-    const fwd  = new THREE.Vector3(0, 0, -1).applyQuaternion(headQuat);
+    const fwd  = new THREE.Vector3(0, 0, 1).applyQuaternion(headQuat);
     const left = new THREE.Vector3(1, 0, 0).applyQuaternion(headQuat);
     fwd.addScaledVector(up, -fwd.dot(up));
     if (fwd.lengthSq() < 1e-8) fwd.set(0, 0, 1); else fwd.normalize();
@@ -93,10 +92,11 @@ export function computeFaceKeypoints(headPos, neckPos, headQuat) {
     const mk = (u, f, sv) => headPos.clone()
         .addScaledVector(up, u * R).addScaledVector(fwd, f * R).add(sv.clone().multiplyScalar(R));
     return {
-        eye_L: mk(0.30,  0.65, left.clone().multiplyScalar(0.22)),
-        eye_R: mk(0.30,  0.65, right.clone().multiplyScalar(0.22)),
-        ear_L: mk(0.10, -0.05, left.clone().multiplyScalar(0.50)),
-        ear_R: mk(0.10, -0.05, right.clone().multiplyScalar(0.50)),
+        // bigger / higher / wider than the first pass (per visual feedback)
+        eye_L: mk(0.60, 0.60, left.clone().multiplyScalar(0.30)),
+        eye_R: mk(0.60, 0.60, right.clone().multiplyScalar(0.30)),
+        ear_L: mk(0.45, -0.05, left.clone().multiplyScalar(0.85)),
+        ear_R: mk(0.45, -0.05, right.clone().multiplyScalar(0.85)),
     };
 }
 
