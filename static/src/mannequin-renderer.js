@@ -1088,7 +1088,10 @@ export class MannequinRenderer {
             if (len < 0.001) { cyl.visible = false; continue; }
 
             cyl.visible = true;
-            // Finger limbs render thinner than body limbs.
+            // Body limbs render full thickness; the delicate groups (fingers AND face "horns")
+            // render thin. VIEWPORT_LIMBS = [...body(13), ...fingers, ...face], so everything
+            // past the body block is a thin group. (If a full-thickness group is ever added
+            // after the body block, switch this to an explicit per-group range check.)
             const radial = i >= SKELETON_LIMBS.length ? FINGER_LIMB_RADIAL_SCALE : 1;
             // Position at midpoint, scale Y to match limb length, rotate Y→dir
             cyl.position.addVectors(pA, pB).multiplyScalar(0.5);
