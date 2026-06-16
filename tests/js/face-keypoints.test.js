@@ -40,13 +40,15 @@ describe('computeFaceKeypoints', () => {
         expect(f.eye_L.z).toBeCloseTo(f.eye_R.z, 6);
     });
 
-    it('tracks head YAW: turning the head +90° about up swings the face sideways', () => {
-        // yaw +90° about world up (+Y): head-forward (+Z) rotates toward +X
+    it('tracks head YAW: turning the head +90° about up swings the face forward sideways', () => {
+        // Eye midpoint cancels the left/right side offset, leaving up + forward only.
+        const mid = (f) => ({ x: (f.eye_L.x + f.eye_R.x) / 2, z: (f.eye_L.z + f.eye_R.z) / 2 });
         const yaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
-        const f = computeFaceKeypoints(head, neck, yaw);
-        const noRotF = computeFaceKeypoints(head, neck, noRot);
-        // with no rotation the eyes lead in +Z; after yaw they should lead in X instead
-        expect(Math.abs(f.eye_L.x - head.x)).toBeGreaterThan(Math.abs(noRotF.eye_L.x - head.x));
-        expect(Math.abs(f.eye_L.z - head.z)).toBeLessThan(Math.abs(noRotF.eye_L.z - head.z));
+        const a = mid(computeFaceKeypoints(head, neck, noRot));   // forward in +Z
+        const b = mid(computeFaceKeypoints(head, neck, yaw));     // forward rotated to +X
+        expect(a.z - head.z).toBeGreaterThan(0.01);               // no rotation → forward +Z
+        expect(Math.abs(a.x - head.x)).toBeLessThan(1e-6);
+        expect(b.x - head.x).toBeGreaterThan(0.01);               // yawed → forward now +X
+        expect(Math.abs(b.z - head.z)).toBeLessThan(1e-6);
     });
 });
