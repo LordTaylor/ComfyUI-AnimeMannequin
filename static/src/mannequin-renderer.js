@@ -78,25 +78,24 @@ const FACE_KP_COLORS = { eye_R: 0xaa00ff, eye_L: 0xff00ff, ear_R: 0xff00aa, ear_
  * re-orthogonalised against up). Scaled by neck→head distance.
  */
 export function computeFaceKeypoints(headPos, neckPos, headQuat) {
-    const up = headPos.clone().sub(neckPos);
-    const R = up.length() || 0.12;
-    up.normalize();
-    // forward/left from the head's own orientation → tracks yaw + tilt.
-    const fwd  = new THREE.Vector3(0, 0, 1).applyQuaternion(headQuat);
-    const left = new THREE.Vector3(1, 0, 0).applyQuaternion(headQuat);
-    fwd.addScaledVector(up, -fwd.dot(up));
+    const R = headPos.distanceTo(neckPos) || 0.12;
+    // Height is WORLD vertical (decoupled from depth) so front + side views stay consistent;
+    // the neck→head axis leans backward and would push the points toward the crown if used as "up".
+    const up = new THREE.Vector3(0, 1, 0);
+    // forward/left from the head's orientation (flattened to horizontal) → face front + sides, tracks yaw.
+    const fwd  = new THREE.Vector3(0, 0, 1).applyQuaternion(headQuat); fwd.y = 0;
     if (fwd.lengthSq() < 1e-8) fwd.set(0, 0, 1); else fwd.normalize();
-    left.addScaledVector(up, -left.dot(up));
+    const left = new THREE.Vector3(1, 0, 0).applyQuaternion(headQuat); left.y = 0;
     if (left.lengthSq() < 1e-8) left.set(1, 0, 0); else left.normalize();
     const right = left.clone().negate();
     const mk = (u, f, sv) => headPos.clone()
         .addScaledVector(up, u * R).addScaledVector(fwd, f * R).add(sv.clone().multiplyScalar(R));
     return {
-        // head bone origin sits low (jaw); lift to eye/ear level and widen to head sides.
-        eye_L: mk(1.60, 0.50, left.clone().multiplyScalar(0.55)),
-        eye_R: mk(1.60, 0.50, right.clone().multiplyScalar(0.55)),
-        ear_L: mk(1.15, -0.05, left.clone().multiplyScalar(1.35)),
-        ear_R: mk(1.15, -0.05, right.clone().multiplyScalar(1.35)),
+        // up = height above the (low, jaw-level) head origin; fwd = onto the face front; side = out.
+        eye_L: mk(1.00, 1.00, left.clone().multiplyScalar(0.50)),
+        eye_R: mk(1.00, 1.00, right.clone().multiplyScalar(0.50)),
+        ear_L: mk(0.80, 0.10, left.clone().multiplyScalar(1.30)),
+        ear_R: mk(0.80, 0.10, right.clone().multiplyScalar(1.30)),
     };
 }
 
