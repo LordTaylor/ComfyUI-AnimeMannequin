@@ -92,10 +92,10 @@ export function computeFaceKeypoints(headPos, neckPos, headQuat) {
         .addScaledVector(up, u * R).addScaledVector(fwd, f * R).add(sv.clone().multiplyScalar(R));
     return {
         // up = height above the (low, jaw-level) head origin; fwd = onto the face front; side = out.
-        eye_L: mk(1.00, 1.00, left.clone().multiplyScalar(0.50)),
-        eye_R: mk(1.00, 1.00, right.clone().multiplyScalar(0.50)),
-        ear_L: mk(0.80, 0.10, left.clone().multiplyScalar(1.30)),
-        ear_R: mk(0.80, 0.10, right.clone().multiplyScalar(1.30)),
+        eye_L: mk(0.85, 1.00, left.clone().multiplyScalar(0.50)),
+        eye_R: mk(0.85, 1.00, right.clone().multiplyScalar(0.50)),
+        ear_L: mk(0.68, 0.10, left.clone().multiplyScalar(1.30)),
+        ear_R: mk(0.68, 0.10, right.clone().multiplyScalar(1.30)),
     };
 }
 
