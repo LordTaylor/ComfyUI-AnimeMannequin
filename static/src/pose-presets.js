@@ -21,8 +21,10 @@ export const POSE_PRESETS = [
         upper_arm_L: [0, 0, 160], upper_arm_R: [0, 0, -160],
     } },
     { id: 'hands_on_hips', name: 'Ręce na biodrach', group: 'basic', angles: {
-        upper_arm_L: [0, -10, 25], forearm_L: [85, 0, 0],
-        upper_arm_R: [0, 10, -25], forearm_R: [85, 0, 0],
+        // Hand-authored (Jarek's export): elbow folds in the frontal plane (Z) so the hand
+        // returns to the hip — this rig's "hand to body" is Z, not X.
+        upper_arm_L: [0, 0, -8], forearm_L: [0, 0, -39], hand_L: [0, 0, 40],
+        upper_arm_R: [0, 0,  8], forearm_R: [0, 0,  37], hand_R: [0, 0, -46],
     } },
     // FLEXION SIGN CONVENTION (this rig): forward flexion of the SHOULDER (upper_arm) and
     // HIP (thigh) is NEGATIVE X (positive X swings them backward). The ELBOW bends at

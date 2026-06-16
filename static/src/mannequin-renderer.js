@@ -73,15 +73,17 @@ const FACE_KP_COLORS = { eye_R: 0xaa00ff, eye_L: 0xff00ff, ear_R: 0xff00aa, ear_
  * @param headQuat         head bone WORLD quaternion — gives forward/left so the face tracks the
  *                         head's full rotation including YAW (turning left/right), not just tilt.
  * Returns world-space positions for eye_L/eye_R/ear_L/ear_R. Eyes sit forward+up+slightly to the
- * sides; ears wider and slightly back. up = neck→head; forward = head-local +Z; left = head-local +X
- * (both re-orthogonalised against up). Scaled by neck→head distance.
+ * sides; ears wider and slightly back. up = neck→head; forward = head-local −Z (toward the
+ * model's nose/face on this rig); left = head-local +X (both re-orthogonalised against up).
+ * Scaled by neck→head distance.
  */
 export function computeFaceKeypoints(headPos, neckPos, headQuat) {
     const up = headPos.clone().sub(neckPos);
     const R = up.length() || 0.12;
     up.normalize();
-    // forward/left from the head's own orientation → tracks yaw + tilt
-    const fwd  = new THREE.Vector3(0, 0, 1).applyQuaternion(headQuat);
+    // forward/left from the head's own orientation → tracks yaw + tilt.
+    // Forward is head-local −Z: the nose/face points that way on this rig.
+    const fwd  = new THREE.Vector3(0, 0, -1).applyQuaternion(headQuat);
     const left = new THREE.Vector3(1, 0, 0).applyQuaternion(headQuat);
     fwd.addScaledVector(up, -fwd.dot(up));
     if (fwd.lengthSq() < 1e-8) fwd.set(0, 0, 1); else fwd.normalize();
@@ -117,7 +119,7 @@ function buildFingerLimbs() {
 const FINGER_LIMBS = buildFingerLimbs();
 
 // Body limbs + finger limbs — used for the 3-D viewport skeleton overlay only.
-const VIEWPORT_LIMBS = [...SKELETON_LIMBS, ...FINGER_LIMBS];
+const VIEWPORT_LIMBS = [...SKELETON_LIMBS, ...FINGER_LIMBS, ...FACE_LIMBS];
 // Finger limbs render thinner than body limbs (radial scale vs the shared cylinder).
 const FINGER_LIMB_RADIAL_SCALE = 0.35;
 
@@ -797,14 +799,10 @@ export class MannequinRenderer {
         }
 
         // Synthetic face keypoints (eyes/ears) derived from the head bone.
-        const _h = this._bones.get('head'), _n = this._bones.get('neck');
-        if (_h && _n) {
-            const face = computeFaceKeypoints(
-                _h.getWorldPosition(new THREE.Vector3()),
-                _n.getWorldPosition(new THREE.Vector3()),
-                _h.getWorldQuaternion(new THREE.Quaternion()));
+        const face = this._computeFacePoints();
+        if (face) {
             for (const [k, pos] of Object.entries(face)) {
-                const p = pos.project(this._camera);
+                const p = pos.clone().project(this._camera);
                 sp.set(k, { x: (p.x * 0.5 + 0.5) * W, y: (-p.y * 0.5 + 0.5) * H });
             }
         }
@@ -1056,21 +1054,35 @@ export class MannequinRenderer {
         this._updateSkeletonLines();
     }
 
+    /** World positions of the synthetic face keypoints (eyes/ears), or null if no head. */
+    _computeFacePoints() {
+        const h = this._bones.get('head'), n = this._bones.get('neck');
+        if (!h || !n) return null;
+        return computeFaceKeypoints(
+            h.getWorldPosition(new THREE.Vector3()),
+            n.getWorldPosition(new THREE.Vector3()),
+            h.getWorldQuaternion(new THREE.Quaternion()));
+    }
+
     _updateSkeletonLines() {
         if (!this._skeletonCylinders || !this._bones.size) return;
         const pA = new THREE.Vector3();
         const pB = new THREE.Vector3();
         const up = new THREE.Vector3(0, 1, 0);
 
+        // Resolve a limb endpoint to a world position: a real bone, or a synthetic face point.
+        const face = this._computeFacePoints();
+        const resolve = (name, out) => {
+            const bone = this._bones.get(name);
+            if (bone) { bone.getWorldPosition(out); return true; }
+            if (face && face[name]) { out.copy(face[name]); return true; }
+            return false;
+        };
+
         for (let i = 0; i < VIEWPORT_LIMBS.length; i++) {
             const [a, b] = VIEWPORT_LIMBS[i];
-            const boneA = this._bones.get(a);
-            const boneB = this._bones.get(b);
             const cyl = this._skeletonCylinders[i];
-            if (!boneA || !boneB) { cyl.visible = false; continue; }
-
-            boneA.getWorldPosition(pA);
-            boneB.getWorldPosition(pB);
+            if (!resolve(a, pA) || !resolve(b, pB)) { cyl.visible = false; continue; }
 
             const dir = new THREE.Vector3().subVectors(pB, pA);
             const len = dir.length();
